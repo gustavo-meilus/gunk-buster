@@ -48,7 +48,7 @@ const AGENT_CONTEXT_DIRS = new Set([
   ".opencode",
 ]);
 
-const GENERATED_DIRS = new Set([
+export const GENERATED_DIRS = new Set([
   "dist",
   "build",
   "out",
@@ -59,7 +59,36 @@ const GENERATED_DIRS = new Set([
   ".turbo",
 ]);
 
-const GENERATED_EXTENSIONS = new Set([".log", ".tsbuildinfo"]);
+export const GENERATED_EXTENSIONS = new Set([".log", ".tsbuildinfo"]);
+
+/** Is `kind` one of the four candidate-universe kinds (not hard-protected "other")? */
+export function isCandidateKind(kind: IndexedKind): kind is FileKind {
+  return kind !== "other";
+}
+
+export interface GeneratedMatch {
+  /** Whole directory matched a known build/cache/coverage output dir, vs. just the extension. */
+  reason: "build-dir" | "extension";
+  /** The matched directory name or extension, for a precise rationale. */
+  detail: string;
+}
+
+/**
+ * Why (if at all) `relPath` was classified "generated" — the DUMP detector's
+ * only input, reused here so its notion of "generated" never drifts from
+ * the file index's.
+ */
+export function generatedMatch(relPath: string): GeneratedMatch | null {
+  const segments = relPath.split("/");
+  const name = segments[segments.length - 1] ?? relPath;
+  const dirs = segments.slice(0, -1);
+  const ext = path.posix.extname(name).toLowerCase();
+
+  const matchedDir = dirs.find((d) => GENERATED_DIRS.has(d));
+  if (matchedDir !== undefined) return { reason: "build-dir", detail: matchedDir };
+  if (GENERATED_EXTENSIONS.has(ext)) return { reason: "extension", detail: ext };
+  return null;
+}
 
 function classifyKind(relPath: string): IndexedKind {
   const segments = relPath.split("/");
@@ -75,7 +104,7 @@ function classifyKind(relPath: string): IndexedKind {
   ) {
     return "agent-context";
   }
-  if (dirs.some((d) => GENERATED_DIRS.has(d)) || GENERATED_EXTENSIONS.has(ext)) {
+  if (generatedMatch(relPath) !== null) {
     return "generated";
   }
   if (DOC_EXTENSIONS.has(ext)) {

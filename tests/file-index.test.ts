@@ -26,12 +26,11 @@ describe("buildFileIndex(repoRoot)", () => {
     expect(paths.some((p) => p.startsWith(".git/"))).toBe(false);
   });
 
-  it("classifies kinds: doc, asset, agent-context, generated", () => {
+  it("classifies kinds: doc, asset, agent-context", () => {
     expect(kindOf("README.md")).toBe("doc");
     expect(kindOf("docs/guide.md")).toBe("doc");
     expect(kindOf("assets/logo.svg")).toBe("asset");
     expect(kindOf("AGENTS.md")).toBe("agent-context");
-    expect(kindOf("coverage/lcov.info")).toBe("generated");
   });
 
   it("keeps code files in the index but outside the candidate kinds", () => {
@@ -44,5 +43,30 @@ describe("buildFileIndex(repoRoot)", () => {
       expect(entry.path).not.toContain("\\");
       expect(entry.size).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("buildFileIndex(repoRoot) — generated kind", () => {
+  let repo: string;
+  let entries: FileEntry[];
+
+  beforeAll(async () => {
+    repo = await createFixtureRepo("generated-dumps");
+    entries = await buildFileIndex(repo);
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  function kindOf(relPath: string): string | undefined {
+    return entries.find((e) => e.path === relPath)?.kind;
+  }
+
+  it("classifies committed build/cache/coverage output and tool-residue extensions as generated", () => {
+    expect(kindOf("dist/bundle.js")).toBe("generated");
+    expect(kindOf("coverage/lcov.info")).toBe("generated");
+    expect(kindOf("build.log")).toBe("generated");
+    expect(kindOf("app.tsbuildinfo")).toBe("generated");
   });
 });

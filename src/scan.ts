@@ -1,20 +1,28 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { classify, summarizeCounts } from "./classify.js";
 import { loadConfig, type GunkConfig } from "./config.js";
+import type { Detector } from "./detector.js";
+import { dumpDetector } from "./detectors/dump.js";
 import { buildFileIndex } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
 import { scanResultSchema, type ScanResult } from "./schema.js";
 
+/** Every detector the scan runs, in registration order. */
+const DETECTORS: readonly Detector[] = [dumpDetector];
+
 /**
  * The engine seam: run a read-only scan of the repo containing `repoRoot`
  * and return the ScanResult (exactly the scan.json document).
  *
- * Builds the scan graphs (file index, git index) and runs every detector
- * over them — there are none yet, so findings is always empty. When no
- * config is passed, the optional config file at the repo root is honored
- * (zero-config otherwise). Throws GunkError for tool errors (e.g. not a
- * git repo); findings never cause an error (ADR-0004).
+ * Builds the scan graphs (file index, git index), then runs the
+ * classification pipeline (ADR-0002) over them: every registered detector
+ * examines every candidate, and the pure verdict function turns evidence
+ * and protections into a verdict per finding. When no config is passed,
+ * the optional config file at the repo root is honored (zero-config
+ * otherwise). Throws GunkError for tool errors (e.g. not a git repo);
+ * findings never cause an error (ADR-0004).
  */
 export async function scan(
   repoRoot: string,
@@ -23,21 +31,17 @@ export async function scan(
   const root = await resolveRepoRoot(repoRoot);
   const effectiveConfig = config ?? (await loadConfig(root));
 
-  // Scan graphs. No detector consumes them yet; building them here means
-  // the whole pipeline exists end to end before the first detector lands.
-  const graphs = {
-    fileIndex: await buildFileIndex(root),
-    gitIndex: await buildGitIndex(root),
-    config: effectiveConfig,
-  };
-  void graphs;
+  const fileIndex = await buildFileIndex(root);
+  const gitIndex = await buildGitIndex(root);
+
+  const findings = classify(fileIndex, gitIndex, effectiveConfig, DETECTORS);
 
   return scanResultSchema.parse({
     schemaVersion: 1,
     scannedAt: new Date().toISOString(),
     repoRoot: root,
-    counts: { byVerdict: {}, byLabel: {} },
-    findings: [],
+    counts: summarizeCounts(findings),
+    findings,
   });
 }
 
