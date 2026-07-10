@@ -1,0 +1,4 @@
+# Not a workspace (single package until MVP 4, per ADR-0003) — pnpm >= 10
+# just requires build-script approvals to live in this file.
+allowBuilds:
+  esbuild: true

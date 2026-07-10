@@ -1,0 +1,36 @@
+{
+  "name": "gunk-buster",
+  "version": "0.1.0",
+  "description": "Finds and quarantines context gunk — stale, agent-readable repo residue — before AI coding agents consume it.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "gunk": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.11.0",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "ignore": "^7.0.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
