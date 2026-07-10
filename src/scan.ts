@@ -4,6 +4,7 @@ import { classify, summarizeCounts } from "./classify.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import type { Detector } from "./detector.js";
 import { dumpDetector } from "./detectors/dump.js";
+import { buildDocGraph, findBrokenLinks } from "./doc-graph.js";
 import { buildFileIndex } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
@@ -16,13 +17,15 @@ const DETECTORS: readonly Detector[] = [dumpDetector];
  * The engine seam: run a read-only scan of the repo containing `repoRoot`
  * and return the ScanResult (exactly the scan.json document).
  *
- * Builds the scan graphs (file index, git index), then runs the
+ * Builds the scan graphs (file index, git index, doc graph), then runs the
  * classification pipeline (ADR-0002) over them: every registered detector
  * examines every candidate, and the pure verdict function turns evidence
- * and protections into a verdict per finding. When no config is passed,
- * the optional config file at the repo root is honored (zero-config
- * otherwise). Throws GunkError for tool errors (e.g. not a git repo);
- * findings never cause an error (ADR-0004).
+ * and protections into a verdict per finding. Broken markdown links are a
+ * graph fact rather than a judgement call, so they bypass the verdict
+ * lattice entirely and become `type: "link"` findings directly from the doc
+ * graph. When no config is passed, the optional config file at the repo
+ * root is honored (zero-config otherwise). Throws GunkError for tool errors
+ * (e.g. not a git repo); findings never cause an error (ADR-0004).
  */
 export async function scan(
   repoRoot: string,
@@ -33,15 +36,17 @@ export async function scan(
 
   const fileIndex = await buildFileIndex(root);
   const gitIndex = await buildGitIndex(root);
+  const docGraph = await buildDocGraph(root, fileIndex);
 
-  const findings = classify(fileIndex, gitIndex, effectiveConfig, DETECTORS);
+  const fileFindings = classify(fileIndex, gitIndex, effectiveConfig, DETECTORS);
+  const linkFindings = findBrokenLinks(docGraph);
 
   return scanResultSchema.parse({
     schemaVersion: 1,
     scannedAt: new Date().toISOString(),
     repoRoot: root,
-    counts: summarizeCounts(findings),
-    findings,
+    counts: summarizeCounts(fileFindings),
+    findings: [...fileFindings, ...linkFindings],
   });
 }
 

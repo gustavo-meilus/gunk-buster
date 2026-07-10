@@ -21,7 +21,7 @@ export interface FileEntry {
   kind: IndexedKind;
 }
 
-const DOC_EXTENSIONS = new Set([".md", ".mdx", ".markdown"]);
+export const DOC_EXTENSIONS = new Set([".md", ".mdx", ".markdown"]);
 
 const ASSET_EXTENSIONS = new Set([
   ".png",
