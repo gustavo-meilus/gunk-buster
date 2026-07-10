@@ -1,0 +1,3 @@
+# Local-only — no CI guard surface
+
+Gunk Buster runs on the developer's machine only. The originally planned Guard milestone (CI mode, GitHub Action, PR comments, failing PRs on new gunk) is dropped from the product, not merely deferred. Two consequences follow: findings never cause a non-zero exit code in any milestone (the only surface ever allowed to fail on findings was Guard), and MVP 4 (agent ecosystem) ships local surfaces only — MCP server, skills, plugins, subagents — with no GitHub Action. This keeps the MVP honest about where it lives: a local context-hygiene tool driven by the Chief, not a gate imposed on contributors.

@@ -2,7 +2,7 @@
 
 Gunk Buster finds stale repo residue — hallucination bait — before AI coding agents eat it. Deterministic CLI-first tool; agent surfaces (skills, plugins, MCP) are thin shells over the CLI core.
 
-Project status: pre-code. `reference/` holds the raw idea mesh (non-authoritative). Decisions land in `CONTEXT.md`, `ROADMAP.md`, `docs/adr/`, and `docs/specs/` as the spec-driven flow produces them. Work is tracked on GitHub Issues under five MVP milestones (scan → radar → trap → guard → agent ecosystem).
+Project status: pre-code. `reference/` holds the raw idea mesh (non-authoritative). Decisions land in `CONTEXT.md`, `ROADMAP.md`, `docs/adr/`, and `docs/specs/` as the spec-driven flow produces them. Work is tracked on GitHub Issues under four MVP milestones (scan → radar → trap → agent ecosystem); the tool is local-only, so there is no guard/CI milestone.
 
 ## Agent skills
 
