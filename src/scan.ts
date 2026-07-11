@@ -87,16 +87,25 @@ export async function scan(
 const SCAN_JSON_RELATIVE_PATH = path.join(".gunk-buster", "scan.json");
 
 /**
+ * The internal .gitignore content shared by scan and radar (#9) — one
+ * constant so both persist functions write identical coverage regardless of
+ * which tool runs first or second.
+ */
+export const GUNK_BUSTER_GITIGNORE = "scan.json\nradar.json\nreports/\n";
+
+/**
  * Persist the scan index to `<repoRoot>/.gunk-buster/scan.json`. The
- * directory ships an internal .gitignore covering scan.json and the reports
- * directory (#7) — both are ephemeral/per-machine for now and must never
- * become context gunk themselves; reports become tracked content only in a
- * later milestone.
+ * directory ships an internal .gitignore covering scan.json, radar.json
+ * (#9), and the reports directory (#7) — all ephemeral/per-machine for now
+ * and must never become context gunk themselves; reports become tracked
+ * content only in a later milestone. The ignore content is the same
+ * constant `persistRadarResult` writes so running `scan` and `radar` in
+ * either order never clobbers the other's coverage of this shared file.
  */
 export async function persistScanResult(result: ScanResult): Promise<string> {
   const dir = path.join(result.repoRoot, ".gunk-buster");
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, ".gitignore"), "scan.json\nreports/\n");
+  await writeFile(path.join(dir, ".gitignore"), GUNK_BUSTER_GITIGNORE);
   const scanPath = path.join(dir, "scan.json");
   await writeFile(scanPath, `${JSON.stringify(result, null, 2)}\n`);
   return scanPath;
