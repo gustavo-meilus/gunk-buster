@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { contextBloatCheck } from "./checks/context-bloat.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import { buildDocGraph, type DocGraph } from "./doc-graph.js";
 import { GunkError } from "./errors.js";
@@ -49,11 +50,10 @@ export interface RadarCheck {
 }
 
 /**
- * Every radar check, in registration order. Empty in this ticket (#9) — the
- * walking skeleton proves the seam end to end before the first real check
- * (package-manager-drift, #10) lands as a pure drop-in.
+ * Every radar check, in registration order. `contextBloatCheck` (#12) is the
+ * first to land as a pure drop-in; #10 and #11 join this list the same way.
  */
-const CHECKS: readonly RadarCheck[] = [];
+const CHECKS: readonly RadarCheck[] = [contextBloatCheck];
 
 /**
  * The label a finding in this audit-surface file gets: agent-context ->
