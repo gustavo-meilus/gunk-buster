@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import ignore from "ignore";
 import { z } from "zod";
 import { contextBloatCheck } from "./checks/context-bloat.js";
 import { deadCommandCheck } from "./checks/dead-command.js";
@@ -44,14 +45,20 @@ const CHECKS: readonly RadarCheck[] = [
  * Build the audit surface: every doc and agent-context file in the index,
  * content pre-read once so every check reads it for free. Mirrors scan.ts's
  * readDocContents, widened to agent-context files per the radar spec.
+ * `radar.exclude` patterns (gitignore-style) are applied here, so an
+ * excluded file is invisible to every check at once — radar-only; scan
+ * still sees these files.
  */
 async function buildAuditSurface(
   repoRoot: string,
   fileIndex: readonly FileEntry[],
+  exclude: readonly string[],
 ): Promise<AuditFile[]> {
+  const excludeMatcher = ignore().add([...exclude]);
   const surface: AuditFile[] = [];
   for (const entry of fileIndex) {
     if (entry.kind !== "doc" && entry.kind !== "agent-context") continue;
+    if (excludeMatcher.ignores(entry.path)) continue;
     surface.push({ entry, content: await readIndexedFile(repoRoot, entry.path) });
   }
   return surface;
@@ -107,7 +114,7 @@ export async function radar(repoRoot: string, config?: GunkConfig): Promise<Rada
   const gitIndex = await buildGitIndex(root);
   const docGraph = await buildDocGraph(root, fileIndex);
   const packages = await buildPackageGraph(root, fileIndex);
-  const surface = await buildAuditSurface(root, fileIndex);
+  const surface = await buildAuditSurface(root, fileIndex, effectiveConfig.radar.exclude);
   const rootGitignore = await readRootGitignore(root);
 
   const ctx: RadarContext = {

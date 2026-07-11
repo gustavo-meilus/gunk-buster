@@ -13,21 +13,18 @@ describe("isPathShaped(token) — the path-shaped candidacy test", () => {
     expect(isPathShaped("docs/")).toBe(true);
   });
 
-  it("qualifies a bare filename with a known extension", () => {
-    expect(isPathShaped("AGENTS.md")).toBe(true);
-    expect(isPathShaped("bundle.js")).toBe(true);
+  it("rejects a bare filename, even with a well-known extension — not provably a claim about this repo", () => {
+    expect(isPathShaped("AGENTS.md")).toBe(false);
+    expect(isPathShaped("bundle.js")).toBe(false);
+    expect(isPathShaped("yarn.lock")).toBe(false);
   });
 
-  it("rejects a plain word with neither a slash nor a known extension", () => {
+  it("rejects a plain word", () => {
     expect(isPathShaped("install")).toBe(false);
     expect(isPathShaped("radar")).toBe(false);
   });
 
-  it("rejects an unrecognized extension", () => {
-    expect(isPathShaped("notes.xyzzy")).toBe(false);
-  });
-
-  it("rejects a dotfile with nothing before the dot (no real extension)", () => {
+  it("rejects a dotfile", () => {
     expect(isPathShaped(".gitignore")).toBe(false);
   });
 });

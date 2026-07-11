@@ -98,6 +98,32 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
     expect(finding).toBeUndefined();
   });
 
+  it("never flags a bare filename mention — a bare filename is not provably a claim about this repo", () => {
+    const paths = deadPathFindings(result).map((f) => f.actual);
+    expect(paths).not.toContain("CLAUDE.md");
+    expect(paths).not.toContain("missing-notes.md");
+  });
+
+  it("never flags a slash-command or a lone slash", () => {
+    const paths = deadPathFindings(result).map((f) => f.actual);
+    expect(paths).not.toContain("/deploy-now");
+    expect(paths).not.toContain("/");
+  });
+
+  it("resolves a root-anchored mention of a tracked file without flagging it", () => {
+    const paths = deadPathFindings(result).map((f) => f.actual);
+    expect(paths).not.toContain("/src/index.ts");
+  });
+
+  it("flags a root-anchored mention of a missing file (leading / stripped, then checked)", () => {
+    const finding = deadPathFindings(result).find(
+      (f) => f.path === "AGENTS.md" && f.actual === "/src/gone.ts",
+    );
+    expect(finding).toBeDefined();
+    expect(finding?.line).toBe(25);
+    expect(finding?.evidence[0]?.confidence).toBe("STRONG");
+  });
+
   it("disables entirely when radar.checks.deadPaths is false", async () => {
     const config = defaultConfig();
     const disabled = { ...config, radar: { ...config.radar, checks: { ...config.radar.checks, deadPaths: false } } };

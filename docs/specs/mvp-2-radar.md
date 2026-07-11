@@ -66,7 +66,7 @@ Script invocations (`npm run X`, `pnpm X`, `yarn X`, `bun run X`) resolved again
 
 ### 3. Dead paths (`dead-path`)
 
-Path-shaped tokens inside code spans/blocks that look like relative repo paths — contain `/` or a known extension — checked against **git-tracked files and directories**. Guards (any hit → token skipped):
+Path-shaped tokens inside code spans/blocks that look like relative repo paths — must contain a `/` after any leading `/` is stripped — checked against **git-tracked files and directories**. A bare filename (`CLAUDE.md`) never qualifies: dogfooding showed generic filename mentions are not provably claims about *this* repo and were the dominant false-positive source. Stripping the leading `/` first, then re-testing, means a slash-command (`/deploy-now`) or a lone `/` never qualifies either, while a root-anchored path (`/src/index.ts`) still resolves like its relative twin. Guards (any hit → token skipped):
 
 - glob characters (`*`, `?`, `[`)
 - placeholder syntax (`<…>`, `{…}`, `$VAR`)
@@ -117,12 +117,15 @@ New `radar` block in `gunk.config.json` (zod, strict):
       "deadPaths": true,
       "contextBloat": true
     },
-    "bloatWordBudget": 2500
+    "bloatWordBudget": 2500,
+    "exclude": []
   }
 }
 ```
 
 All checks default on; kill switches are the escape hatch for repos with deliberately unusual setups. Zero-config still works.
+
+`radar.exclude` is a list of gitignore-style patterns removing files from the audit surface entirely — an excluded file is invisible to **every** check. It exists for repos whose docs legitimately quote paths and commands that are not repo claims: test fixtures, strategy/reference docs, specs that quote the very anti-pattern they define. Radar-only — scan's GHOST/DUMP/ECHO detection still sees excluded files. File-level only; inline suppression comments are explicitly out (they invite gunk of their own).
 
 ## Non-Node repos
 

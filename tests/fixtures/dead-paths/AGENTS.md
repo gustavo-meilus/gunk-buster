@@ -17,3 +17,9 @@ Gitignored paths are skipped: `dist/bundle.js`
 ```
 scripts/build-legacy.sh
 ```
+
+Bare filename mentions are not path claims: `CLAUDE.md` and `missing-notes.md`
+
+Slash commands are not paths: run `/deploy-now`, and `/` alone is syntax.
+
+Root-anchored paths are real claims: `/src/index.ts` exists, `/src/gone.ts` does not.

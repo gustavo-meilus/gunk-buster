@@ -28,6 +28,14 @@ export const radarConfigSchema = z.strictObject({
   checks: radarChecksSchema.default(() => radarChecksSchema.parse({})),
   /** Word-count threshold for the context-bloat check's WEAK rule. */
   bloatWordBudget: z.int().positive().default(2500),
+  /**
+   * Gitignore-style patterns removing files from the radar audit surface
+   * entirely — an excluded file is invisible to every check. For repos whose
+   * docs legitimately quote paths/commands that aren't repo claims (test
+   * fixtures, strategy docs, specs that quote the anti-pattern they define).
+   * Radar-only: scan still sees these files.
+   */
+  exclude: z.array(z.string()).default([]),
 });
 
 // strictObject: an unknown knob (e.g. a typo) is a tool error, never

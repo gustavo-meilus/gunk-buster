@@ -32,6 +32,7 @@ describe("loadConfig(repoRoot)", () => {
           contextBloat: true,
         },
         bloatWordBudget: 2500,
+        exclude: [],
       },
     });
     expect(existsSync(path.join(dir, CONFIG_FILE_NAME))).toBe(false);
@@ -56,6 +57,7 @@ describe("loadConfig(repoRoot)", () => {
           contextBloat: true,
         },
         bloatWordBudget: 2500,
+        exclude: [],
       },
     });
   });
@@ -76,7 +78,19 @@ describe("loadConfig(repoRoot)", () => {
         contextBloat: true,
       },
       bloatWordBudget: 1000,
+      exclude: [],
     });
+  });
+
+  it("reads radar.exclude patterns and leaves the other radar knobs at defaults", async () => {
+    await writeFile(
+      path.join(dir, CONFIG_FILE_NAME),
+      JSON.stringify({ radar: { exclude: ["tests/fixtures/**", "reference/**"] } }),
+    );
+    const config = await loadConfig(dir);
+    expect(config.radar.exclude).toEqual(["tests/fixtures/**", "reference/**"]);
+    expect(config.radar.checks.deadPaths).toBe(true);
+    expect(config.radar.bloatWordBudget).toBe(2500);
   });
 
   it("rejects an unknown key inside the radar block as a tool error", async () => {

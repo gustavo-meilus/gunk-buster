@@ -1,0 +1,10 @@
+{
+  "radar": {
+    "exclude": [
+      "tests/fixtures/**",
+      "reference/**",
+      "docs/specs/**",
+      "docs/agents/**"
+    ]
+  }
+}

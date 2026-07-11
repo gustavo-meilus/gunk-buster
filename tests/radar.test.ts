@@ -145,6 +145,37 @@ describe("radar(repoRoot, config) — engine seam", () => {
   });
 });
 
+describe("radar.exclude — removing files from the audit surface", () => {
+  let repo: string;
+
+  beforeAll(async () => {
+    repo = await createFixtureRepo("dead-paths");
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  it("an excluded file emits no findings from any check; the rest of the surface is untouched", async () => {
+    const config = defaultConfig();
+    const excluded = { ...config, radar: { ...config.radar, exclude: ["AGENTS.md"] } };
+    const result = await radar(repo, excluded);
+
+    expect(result.findings.every((f) => f.path !== "AGENTS.md")).toBe(true);
+    // README.md's dead-path finding survives — exclusion is per-pattern, not a kill switch
+    expect(result.findings.some((f) => f.path === "README.md")).toBe(true);
+  });
+
+  it("supports gitignore-style directory globs", async () => {
+    const config = defaultConfig();
+    const excluded = { ...config, radar: { ...config.radar, exclude: ["docs/**"] } };
+    const result = await radar(repo, excluded);
+
+    expect(result.findings.every((f) => !f.path.startsWith("docs/"))).toBe(true);
+    expect(result.findings.some((f) => f.path === "AGENTS.md")).toBe(true);
+  });
+});
+
 describe("loadRadarResult(repoRoot) — reading the persisted radar index back", () => {
   let repo: string;
 

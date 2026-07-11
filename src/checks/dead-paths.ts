@@ -14,8 +14,10 @@ import type { ClaimFinding } from "../schema.js";
  * contradicts. Conservative by design — a false BAIT accusation is
  * expensive:
  *
- *  - a token only qualifies as "path-shaped" when it contains a `/` or ends
- *    in a recognized file extension (prose words never qualify);
+ *  - a token only qualifies as "path-shaped" when it contains a `/` after
+ *    any leading `/` is stripped — a bare filename (`CLAUDE.md`), a
+ *    slash-command (`/deploy-now`), or a prose word is never provably a
+ *    claim about *this* repo, however file-like it looks;
  *  - any guard hit (glob characters, placeholder syntax, a URL scheme, a
  *    `.gitignore` match) skips the token outright, no matter how path-shaped
  *    it looks;
@@ -27,71 +29,6 @@ import type { ClaimFinding } from "../schema.js";
  * No suggestion is ever attached (spec) — there is no deterministic rewrite
  * for "this path doesn't exist."
  */
-
-/**
- * Extensions common enough across ecosystems that a bare filename mention
- * (no `/`) is still recognizably path-shaped. Extends the file index's own
- * doc/asset/generated extension sets (never redefines them) with the
- * source/config extensions a doc is likely to name in a code span.
- */
-const KNOWN_PATH_EXTENSIONS = new Set([
-  // docs
-  ".md",
-  ".mdx",
-  ".markdown",
-  // assets
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".svg",
-  ".webp",
-  ".ico",
-  // generated/tool residue
-  ".log",
-  ".tsbuildinfo",
-  // source & config, common across ecosystems
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-  ".json",
-  ".jsonc",
-  ".yml",
-  ".yaml",
-  ".toml",
-  ".ini",
-  ".cfg",
-  ".py",
-  ".rb",
-  ".go",
-  ".rs",
-  ".java",
-  ".kt",
-  ".c",
-  ".h",
-  ".cpp",
-  ".hpp",
-  ".cs",
-  ".php",
-  ".sh",
-  ".bash",
-  ".zsh",
-  ".css",
-  ".scss",
-  ".html",
-  ".xml",
-  ".txt",
-  ".sql",
-  ".lock",
-  ".env",
-  ".vue",
-  ".svelte",
-  ".graphql",
-  ".proto",
-]);
 
 /** Glob characters — any hit skips the token (spec guard 1). */
 export function hasGlobChars(token: string): boolean {
@@ -113,17 +50,15 @@ export function hasUrlScheme(token: string): boolean {
   return EXTERNAL_SCHEME.test(token);
 }
 
-/** The lowercased extension of a token's final path segment, or "" when it has none (or is a dotfile with nothing before the dot). */
-function extensionOf(token: string): string {
-  const base = token.split("/").pop() ?? token;
-  const dotIndex = base.lastIndexOf(".");
-  if (dotIndex <= 0) return "";
-  return base.slice(dotIndex).toLowerCase();
-}
-
-/** Is `token` path-shaped: contains a `/`, or ends in a known file extension (spec)? */
+/**
+ * Is `token` path-shaped: does it contain a `/` (spec)? A bare filename with
+ * a familiar extension deliberately does NOT qualify — dogfooding showed
+ * generic mentions (`CLAUDE.md`, `SKILL.md`, `yarn.lock` as concepts, not
+ * repo claims) were ~85% of all false positives. Callers strip any leading
+ * `/` before testing, so a slash-command never qualifies either.
+ */
 export function isPathShaped(token: string): boolean {
-  return token.includes("/") || KNOWN_PATH_EXTENSIONS.has(extensionOf(token));
+  return token.includes("/");
 }
 
 // Outer punctuation a token can pick up from surrounding prose-like
@@ -253,10 +188,15 @@ export const deadPathCheck: RadarCheck = {
       const brokenLinkTargets = brokenLinkTargetsOf(ctx, file.entry.path);
 
       for (const { token, line } of extractPathMentions(file.content)) {
-        if (!isPathShaped(token)) continue;
+        // Leading "/" is stripped first, then path-shapedness re-tested on
+        // the stripped form: a slash-command ("/deploy-now") or a lone "/"
+        // stops qualifying, while a root-anchored path ("/src/index.ts")
+        // still resolves against the git index like its relative twin.
+        const candidate = token.replace(/^\/+/, "");
+        if (!isPathShaped(candidate)) continue;
         if (hasGlobChars(token) || hasPlaceholderSyntax(token) || hasUrlScheme(token)) continue;
 
-        const normalized = normalizeToken(token);
+        const normalized = normalizeToken(candidate);
         if (normalized === "" || normalized === "." || normalized.startsWith("..")) continue;
 
         let ignoredByGitignore = false;
