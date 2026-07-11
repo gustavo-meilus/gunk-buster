@@ -1,5 +1,6 @@
 import type { GunkConfig } from "./config.js";
 import type { Detector, DetectorContext } from "./detector.js";
+import type { DocGraph } from "./doc-graph.js";
 import { isCandidateKind } from "./file-index.js";
 import type { FileEntry } from "./file-index.js";
 import type { GitIndex } from "./git-index.js";
@@ -17,10 +18,11 @@ import { computeVerdict } from "./verdict.js";
 export function classify(
   fileIndex: readonly FileEntry[],
   gitIndex: GitIndex,
+  docGraph: DocGraph,
   config: GunkConfig,
   detectors: readonly Detector[],
 ): FileFinding[] {
-  const ctx: DetectorContext = { fileIndex, gitIndex, config };
+  const ctx: DetectorContext = { fileIndex, gitIndex, docGraph, config };
   const findings: FileFinding[] = [];
 
   for (const entry of fileIndex) {

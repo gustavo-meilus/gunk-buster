@@ -1,4 +1,5 @@
 import type { GunkConfig } from "./config.js";
+import type { DocGraph } from "./doc-graph.js";
 import type { FileEntry } from "./file-index.js";
 import type { GitIndex } from "./git-index.js";
 import type { Evidence, Label } from "./schema.js";
@@ -11,6 +12,7 @@ import type { Evidence, Label } from "./schema.js";
 export interface DetectorContext {
   fileIndex: readonly FileEntry[];
   gitIndex: GitIndex;
+  docGraph: DocGraph;
   config: GunkConfig;
 }
 

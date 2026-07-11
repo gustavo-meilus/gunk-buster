@@ -8,6 +8,8 @@ export { buildGitIndex } from "./git-index.js";
 export type { GitIndex } from "./git-index.js";
 export {
   buildDocGraph,
+  docStructureOf,
+  extractDocStructure,
   findBrokenLinks,
   inboundImagesOf,
   inboundLinksOf,
@@ -15,6 +17,6 @@ export {
   isReferencedByReadme,
   outboundReferencesOf,
 } from "./doc-graph.js";
-export type { DocGraph, DocRefKind, DocReference } from "./doc-graph.js";
+export type { DocGraph, DocRefKind, DocReference, DocStructure } from "./doc-graph.js";
 export { GunkError } from "./errors.js";
 export * from "./schema.js";

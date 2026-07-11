@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { Definition, Image, ImageReference, Link, LinkReference, Root } from "mdast";
+import type { Definition, Heading, Image, ImageReference, Link, LinkReference, Root } from "mdast";
 import { remark } from "remark";
 import { visit } from "unist-util-visit";
 import { DOC_EXTENSIONS, type FileEntry } from "./file-index.js";
@@ -13,11 +13,11 @@ import type { LinkFinding } from "./schema.js";
  * hand-rolled link extraction is a false-positive farm the moment a link
  * spans lines, uses reference-style syntax, or sits inside a code span.
  *
- * This is the reference surface later detectors (GHOST, ECHO) consume; it
- * is exposed queryably (inboundLinksOf, outboundLinksOf, isReferencedByReadme,
- * isInNav) rather than folded straight into a finding list, so a later
- * detector can ask "does anything reference this file" without recomputing
- * the graph.
+ * This is the reference surface detectors (GHOST, ECHO) consume; it is
+ * exposed queryably (inboundLinksOf, outboundLinksOf, isReferencedByReadme,
+ * isInNav, docStructureOf) rather than folded straight into a finding list,
+ * so a detector can ask "does anything reference this file" or "what is
+ * this doc's heading skeleton" without recomputing the graph.
  */
 
 export type DocRefKind = "link" | "image";
@@ -45,11 +45,26 @@ export interface DocReference {
   broken: boolean;
 }
 
+/**
+ * A document's heading skeleton — what the ECHO duplicate detector compares.
+ * Duplicate detection in MVP 1 is title/heading similarity only (fuzzy
+ * content hashing is explicitly out of scope), so this is deliberately just
+ * the headings, nothing about body text.
+ */
+export interface DocStructure {
+  /** Text of the document's first depth-1 heading (`# Title`), or null when it has none. */
+  title: string | null;
+  /** Texts of every other heading, in document order (the title heading excluded). */
+  headings: readonly string[];
+}
+
 export interface DocGraph {
   /** Every reference (link or image) found across every parsed doc, in file order. */
   references: readonly DocReference[];
   /** doc/agent-context path -> its outbound references. */
   outbound: ReadonlyMap<string, readonly DocReference[]>;
+  /** doc/agent-context path -> its title/heading skeleton. */
+  structures: ReadonlyMap<string, DocStructure>;
   /** repo-relative path -> paths of docs that link to it (valid, resolved link references). */
   inboundLinks: ReadonlyMap<string, ReadonlySet<string>>;
   /** repo-relative path -> paths of docs that reference it as an image. */
@@ -155,14 +170,55 @@ export function resolveReference(
   };
 }
 
-/** Parse one document's markdown into its outbound references (links, images, and reference-style variants of both). */
+/**
+ * The visible text of one heading node: its text and inline-code children,
+ * concatenated in order. Emphasis/strong wrappers contribute their inner
+ * text; links inside a heading contribute their label, not their URL.
+ */
+function headingText(heading: Heading): string {
+  const parts: string[] = [];
+  visit(heading, (node) => {
+    if (node.type === "text" || node.type === "inlineCode") {
+      parts.push((node as { value: string }).value);
+    }
+  });
+  return parts.join("");
+}
+
+/** Pull the title/heading skeleton out of a parsed markdown tree. */
+function structureFromTree(tree: Root): DocStructure {
+  let title: string | null = null;
+  const headings: string[] = [];
+
+  visit(tree, "heading", (node: Heading) => {
+    const text = headingText(node);
+    if (title === null && node.depth === 1) {
+      title = text;
+    } else {
+      headings.push(text);
+    }
+  });
+
+  return { title, headings };
+}
+
+/**
+ * Parse one document's markdown into its DocStructure. Exported (in
+ * addition to being exercised through `buildDocGraph`/`scan`) so heading
+ * extraction edge cases (setext titles, inline code in headings, docs with
+ * no h1) can be unit-tested directly — the engine seam is too coarse for
+ * that.
+ */
+export function extractDocStructure(content: string): DocStructure {
+  return structureFromTree(remark().parse(content) as Root);
+}
+
+/** Parse one document's markdown tree into its outbound references (links, images, and reference-style variants of both). */
 function extractReferences(
   fromPath: string,
-  content: string,
+  tree: Root,
   filePaths: ReadonlySet<string>,
 ): DocReference[] {
-  const tree = remark().parse(content) as Root;
-
   const definitions = new Map<string, string>();
   visit(tree, "definition", (node: Definition) => {
     definitions.set(node.identifier, node.url);
@@ -217,13 +273,16 @@ export async function buildDocGraph(
 
   const references: DocReference[] = [];
   const outbound = new Map<string, readonly DocReference[]>();
+  const structures = new Map<string, DocStructure>();
 
   for (const entry of parsable) {
     const absPath = path.join(repoRoot, ...entry.path.split("/"));
     const content = await readFile(absPath, "utf8");
-    const refs = extractReferences(entry.path, content, filePaths);
+    const tree = remark().parse(content) as Root;
+    const refs = extractReferences(entry.path, tree, filePaths);
     outbound.set(entry.path, refs);
     references.push(...refs);
+    structures.set(entry.path, structureFromTree(tree));
   }
 
   const inboundLinks = new Map<string, Set<string>>();
@@ -243,7 +302,20 @@ export async function buildDocGraph(
     if (isNavFile(ref.from)) navReferenced.add(ref.resolved);
   }
 
-  return { references, outbound, inboundLinks, inboundImages, readmeReferenced, navReferenced };
+  return {
+    references,
+    outbound,
+    structures,
+    inboundLinks,
+    inboundImages,
+    readmeReferenced,
+    navReferenced,
+  };
+}
+
+/** The title/heading skeleton of `docPath`, or null when it was never parsed (not a markdown doc). */
+export function docStructureOf(graph: DocGraph, docPath: string): DocStructure | null {
+  return graph.structures.get(docPath) ?? null;
 }
 
 /** Paths of docs that link to `targetPath` (valid, resolved link references only — not images). */
