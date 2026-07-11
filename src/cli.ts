@@ -1,23 +1,36 @@
 #!/usr/bin/env node
-import path from "node:path";
 import { Command } from "commander";
 import packageJson from "../package.json" with { type: "json" };
+import { loadConfig, type GunkConfig } from "./config.js";
 import { GunkError } from "./errors.js";
-import { persistScanResult, scan } from "./scan.js";
+import { resolveRepoRoot } from "./git.js";
+import { buildPileResult } from "./pile.js";
+import { writeReport } from "./report.js";
+import { loadScanResult, persistScanResult, scan } from "./scan.js";
 import type { ScanResult } from "./schema.js";
+import { renderPileHuman, renderReportHuman, renderScanHuman } from "./voice.js";
 
 /**
- * The CLI is a thin shell over the engine seam: scan, persist, print.
- * All judgement lives in the engine.
+ * The CLI is a thin shell over the engine seam: scan/pile/report load or
+ * build a document, then print it — either the schema-versioned document
+ * itself (`--json`) or a Chief-voiced (or professional-voiced) rendering of
+ * it. All judgement lives in the engine; this file never computes a
+ * verdict, a label, or a grouping.
  */
 
-function humanSummary(result: ScanResult): string {
-  // Plain summary for now; the Chief voice lands in a later ticket.
-  return [
-    `Scanned ${result.repoRoot}`,
-    `Findings: ${result.findings.length}`,
-    `Scan index written to ${path.join(".gunk-buster", "scan.json")}`,
-  ].join("\n");
+function printJson(document: unknown): void {
+  process.stdout.write(`${JSON.stringify(document, null, 2)}\n`);
+}
+
+/**
+ * The shared view preamble: resolve the repo, read its config (for the
+ * voice), and load the persisted scan index — never re-scan (#7).
+ */
+async function loadViewContext(): Promise<{ config: GunkConfig; scanResult: ScanResult }> {
+  const root = await resolveRepoRoot(process.cwd());
+  const config = await loadConfig(root);
+  const scanResult = await loadScanResult(root);
+  return { config, scanResult };
 }
 
 const program = new Command();
@@ -35,14 +48,49 @@ program
   .option("--json", "print the ScanResult document to stdout")
   .action(async (options: { json?: boolean }) => {
     const result = await scan(process.cwd());
-    await persistScanResult(result);
+    const scanPath = await persistScanResult(result);
+    const config = await loadConfig(result.repoRoot);
 
     if (options.json) {
-      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      printJson(result);
     } else {
-      process.stdout.write(`${humanSummary(result)}\n`);
+      process.stdout.write(`${renderScanHuman(config.voice, result, scanPath)}\n`);
     }
     // Exit 0 on any successful scan, findings or not (ADR-0004).
+  });
+
+program
+  .command("pile")
+  .description("Show findings grouped by label, from the persisted scan index")
+  .option("--json", "print the PileResult document to stdout")
+  .action(async (options: { json?: boolean }) => {
+    const { config, scanResult } = await loadViewContext();
+    const pile = buildPileResult(scanResult);
+
+    if (options.json) {
+      printJson(pile);
+    } else {
+      process.stdout.write(`${renderPileHuman(config.voice, pile)}\n`);
+    }
+    // Exit 0 regardless of findings — pile only ever renders, never judges.
+  });
+
+program
+  .command("report")
+  .description(
+    "Write a markdown report into .gunk-buster/reports/ from the persisted scan index",
+  )
+  .option("--json", "print the ReportResult document to stdout")
+  .action(async (options: { json?: boolean }) => {
+    const { config, scanResult } = await loadViewContext();
+    const report = await writeReport(scanResult);
+
+    if (options.json) {
+      printJson(report);
+    } else {
+      process.stdout.write(`${renderReportHuman(config.voice, report)}\n`);
+    }
+    // Exit 0 regardless of findings — report only ever renders, never judges.
   });
 
 try {
