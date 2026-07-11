@@ -1,0 +1,7 @@
+{
+  "name": "pm-drift-lockfile-fixture",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  }
+}

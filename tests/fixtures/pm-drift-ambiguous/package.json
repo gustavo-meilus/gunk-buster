@@ -1,0 +1,7 @@
+{
+  "name": "pm-drift-ambiguous-fixture",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  }
+}
