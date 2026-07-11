@@ -8,6 +8,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CONFIG_FILE_NAME } from "../src/config.js";
 import { pileResultSchema } from "../src/pile.js";
 import { reportResultSchema } from "../src/report.js";
+import { fixPlanResultSchema } from "../src/radar.js";
 import { createEmptyGitRepo, createFixtureRepo, removeDir } from "./helpers/fixture.js";
 
 const execFileAsync = promisify(execFile);
@@ -217,5 +218,141 @@ describe("gunk pile / gunk report — CLI views over the persisted scan index (#
     } finally {
       await removeDir(dir);
     }
+  });
+});
+
+describe("gunk pile / gunk report — merging the radar index in when it exists (#13)", () => {
+  const repos: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(repos.splice(0).map((repo) => removeDir(repo)));
+  });
+
+  it("gunk pile shows BAIT/MOLD groups alongside the scan groups once radar has run too", async () => {
+    const repo = await createFixtureRepo("radar-merge", { commitDate: NINETY_DAYS_AGO });
+    repos.push(repo);
+
+    expect((await runGunk(repo, "scan")).exitCode).toBe(0);
+    expect((await runGunk(repo, "radar")).exitCode).toBe(0);
+
+    const pileRun = await runGunk(repo, "pile");
+    expect(pileRun.exitCode).toBe(0);
+    expect(pileRun.stdout).toContain("DUMP");
+    expect(pileRun.stdout).toContain("BAIT");
+    expect(pileRun.stdout).toContain("CLAUDE.md");
+
+    const jsonRun = await runGunk(repo, "pile", "--json");
+    expect(jsonRun.exitCode).toBe(0);
+    const parsed = pileResultSchema.parse(JSON.parse(jsonRun.stdout));
+    expect(parsed.groups.map((g) => g.label).sort()).toEqual(["BAIT", "DUMP"]);
+    expect(jsonRun.stdout.toLowerCase()).not.toContain("chief");
+  });
+
+  it("gunk report writes a report including the radar findings once radar has run too", async () => {
+    const repo = await createFixtureRepo("radar-merge", { commitDate: NINETY_DAYS_AGO });
+    repos.push(repo);
+
+    expect((await runGunk(repo, "scan")).exitCode).toBe(0);
+    expect((await runGunk(repo, "radar")).exitCode).toBe(0);
+
+    const reportRun = await runGunk(repo, "report");
+    expect(reportRun.exitCode).toBe(0);
+
+    const reportPath = path.join(repo, ".gunk-buster", "reports", "report.md");
+    const markdown = await readFile(reportPath, "utf8");
+    expect(markdown).toContain("DUMP");
+    expect(markdown).toContain("BAIT");
+    expect(markdown).toContain("CLAUDE.md");
+  });
+
+  /**
+   * Volatile per-run fields (scannedAt, the temp-dir repoRoot) differ even
+   * between two runs over byte-identical fixture content, so "byte-identical"
+   * is checked with those normalized away — the same technique the engine
+   * seam's own inline snapshots use (tests/radar.test.ts).
+   */
+  function normalizeVolatile(document: Record<string, unknown>): unknown {
+    return {
+      ...document,
+      scannedAt: "<scannedAt>",
+      repoRoot: "<repoRoot>",
+      ...("reportPath" in document ? { reportPath: "<reportPath>" } : {}),
+    };
+  }
+
+  it("without a radar index, gunk pile/report JSON output stays structurally identical to running scan alone", async () => {
+    const withoutRadar = await createFixtureRepo("generated-dumps", { commitDate: NINETY_DAYS_AGO });
+    const withRadarButUnrun = await createFixtureRepo("generated-dumps", { commitDate: NINETY_DAYS_AGO });
+    repos.push(withoutRadar, withRadarButUnrun);
+
+    await runGunk(withoutRadar, "scan");
+    await runGunk(withRadarButUnrun, "scan");
+    // Neither repo has run `gunk radar` — both must render identically once
+    // volatile per-run fields are normalized away.
+
+    const pileA = await runGunk(withoutRadar, "pile", "--json");
+    const pileB = await runGunk(withRadarButUnrun, "pile", "--json");
+    expect(normalizeVolatile(JSON.parse(pileA.stdout))).toEqual(
+      normalizeVolatile(JSON.parse(pileB.stdout)),
+    );
+    // Neither carries the radar-merge fields at all — not just empty ones.
+    expect(JSON.parse(pileA.stdout)).not.toHaveProperty("radarScannedAt");
+
+    const pileHumanA = await runGunk(withoutRadar, "pile");
+    const pileHumanB = await runGunk(withRadarButUnrun, "pile");
+    expect(pileHumanA.stdout).toBe(pileHumanB.stdout);
+
+    const reportA = await runGunk(withoutRadar, "report", "--json");
+    const reportB = await runGunk(withRadarButUnrun, "report", "--json");
+    expect(normalizeVolatile(JSON.parse(reportA.stdout))).toEqual(
+      normalizeVolatile(JSON.parse(reportB.stdout)),
+    );
+    expect(JSON.parse(reportA.stdout)).not.toHaveProperty("radarScannedAt");
+
+    const reportPathA = path.join(withoutRadar, ".gunk-buster", "reports", "report.md");
+    const reportPathB = path.join(withRadarButUnrun, ".gunk-buster", "reports", "report.md");
+    function normalizeMarkdown(markdown: string): string {
+      return markdown
+        .replace(/- Scanned: .*/, "- Scanned: <scannedAt>")
+        .replace(/- Repo: .*/, "- Repo: <repoRoot>");
+    }
+    const markdownA = normalizeMarkdown(await readFile(reportPathA, "utf8"));
+    const markdownB = normalizeMarkdown(await readFile(reportPathB, "utf8"));
+    expect(markdownA).toBe(markdownB);
+    expect(markdownA).not.toContain("Radar scanned");
+  });
+});
+
+describe("gunk radar --fix-plan — the aggregated suggestion checklist (#13)", () => {
+  const repos: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(repos.splice(0).map((repo) => removeDir(repo)));
+  });
+
+  it("lists only suggestion-carrying findings as a checklist, human and JSON", async () => {
+    const repo = await createFixtureRepo("pm-drift-field");
+    repos.push(repo);
+
+    const humanRun = await runGunk(repo, "radar", "--fix-plan");
+    expect(humanRun.exitCode).toBe(0);
+    expect(humanRun.stdout).toContain("CLAUDE.md");
+    expect(humanRun.stdout).toContain("pnpm install");
+    expect(() => JSON.parse(humanRun.stdout)).toThrow();
+
+    const jsonRun = await runGunk(repo, "radar", "--fix-plan", "--json");
+    expect(jsonRun.exitCode).toBe(0);
+    const parsed = fixPlanResultSchema.parse(JSON.parse(jsonRun.stdout));
+    expect(parsed.items.length).toBeGreaterThan(0);
+    expect(parsed.items.every((item) => item.suggestion.replace !== undefined)).toBe(true);
+    expect(jsonRun.stdout.toLowerCase()).not.toContain("chief");
+  });
+
+  it("still persists radar.json — --fix-plan only changes what's printed", async () => {
+    const repo = await createFixtureRepo("pm-drift-field");
+    repos.push(repo);
+
+    await runGunk(repo, "radar", "--fix-plan");
+    expect(existsSync(path.join(repo, ".gunk-buster", "radar.json"))).toBe(true);
   });
 });

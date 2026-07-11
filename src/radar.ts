@@ -14,7 +14,14 @@ import { resolveRepoRoot } from "./git.js";
 import { buildPackageGraph } from "./package-graph.js";
 import type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
 import { GUNK_BUSTER_GITIGNORE } from "./scan.js";
-import { radarResultSchema, type ClaimFinding, type ClaimLabel, type RadarResult } from "./schema.js";
+import {
+  CLAIM_LABELS,
+  radarResultSchema,
+  suggestionSchema,
+  type ClaimFinding,
+  type ClaimLabel,
+  type RadarResult,
+} from "./schema.js";
 
 export type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
 export { labelFor } from "./radar-check.js";
@@ -143,26 +150,29 @@ export async function persistRadarResult(result: RadarResult): Promise<string> {
 }
 
 /**
- * Load the persisted radar index from `<repoRoot>/.gunk-buster/radar.json`.
- * Mirrors loadScanResult: `pile` and `report` read this back once they merge
- * radar findings in (spec), and never re-run radar themselves. Throws a
- * helpful GunkError when no radar has been run yet, or when the persisted
- * file fails to parse against the schema.
+ * Read `<repoRoot>/.gunk-buster/radar.json` verbatim, or `undefined` when it
+ * does not exist yet — a missing radar index is a perfectly normal repo
+ * state (no `gunk radar` has run there), not a tool error. Any other read
+ * failure (permissions, etc.) is a tool error. Shared by `loadRadarResult`
+ * (which turns "missing" into a helpful GunkError, for `gunk radar` itself
+ * to read its own index back) and `tryLoadRadarResult` (which lets "missing"
+ * flow through as `undefined`, for `pile`/`report` to merge radar in only
+ * when it exists — spec: "when no radar index exists, both commands behave
+ * EXACTLY as today").
  */
-export async function loadRadarResult(repoRoot: string): Promise<RadarResult> {
+async function readRadarFile(repoRoot: string): Promise<string | undefined> {
   const radarPath = path.join(repoRoot, RADAR_JSON_RELATIVE_PATH);
-
-  let raw: string;
   try {
-    raw = await readFile(radarPath, "utf8");
+    return await readFile(radarPath, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new GunkError(
-        `no radar index found at ${radarPath} — run "gunk radar" first`,
-      );
-    }
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw new GunkError(`cannot read radar index: ${String(error)}`);
   }
+}
+
+/** Parse and schema-validate raw radar.json content, or throw a helpful GunkError. */
+function parseRadarJson(repoRoot: string, raw: string): RadarResult {
+  const radarPath = path.join(repoRoot, RADAR_JSON_RELATIVE_PATH);
 
   let parsed: unknown;
   try {
@@ -178,4 +188,94 @@ export async function loadRadarResult(repoRoot: string): Promise<RadarResult> {
     );
   }
   return result.data;
+}
+
+/**
+ * Load the persisted radar index from `<repoRoot>/.gunk-buster/radar.json`.
+ * `gunk radar` itself is the only caller that needs "no index yet" treated
+ * as an error (there is nothing to print back); `pile` and `report` use
+ * `tryLoadRadarResult` instead. Throws a helpful GunkError when no radar has
+ * been run yet, or when the persisted file fails to parse against the
+ * schema.
+ */
+export async function loadRadarResult(repoRoot: string): Promise<RadarResult> {
+  const raw = await readRadarFile(repoRoot);
+  if (raw === undefined) {
+    const radarPath = path.join(repoRoot, RADAR_JSON_RELATIVE_PATH);
+    throw new GunkError(
+      `no radar index found at ${radarPath} — run "gunk radar" first`,
+    );
+  }
+  return parseRadarJson(repoRoot, raw);
+}
+
+/**
+ * Load the persisted radar index if one exists, or `undefined` if `gunk
+ * radar` has never run in this repo. `pile` and `report` (#13) use this
+ * instead of `loadRadarResult` so a missing radar index is simply "nothing
+ * to merge in" rather than a tool error — the spec requires their output to
+ * stay byte-identical to MVP 1 when no radar index exists, which a thrown
+ * error would break. A corrupt or schema-invalid radar.json still throws:
+ * only "never ran" is silent.
+ */
+export async function tryLoadRadarResult(repoRoot: string): Promise<RadarResult | undefined> {
+  const raw = await readRadarFile(repoRoot);
+  if (raw === undefined) return undefined;
+  return parseRadarJson(repoRoot, raw);
+}
+
+/**
+ * `gunk radar --fix-plan`'s document contract: one checklist item per claim
+ * finding that carries a deterministic `suggestion` (spec: "Only findings
+ * that CARRY a suggestion appear"). No diffs, nothing applied — mutation is
+ * MVP 3, so an item is a suggested edit, never something the tool already
+ * did.
+ */
+export const fixPlanItemSchema = z.object({
+  path: z.string(),
+  line: z.int().positive(),
+  label: z.enum(CLAIM_LABELS),
+  check: z.string(),
+  expected: z.string(),
+  actual: z.string(),
+  suggestion: suggestionSchema,
+});
+
+export const fixPlanResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  scannedAt: radarResultSchema.shape.scannedAt,
+  repoRoot: z.string(),
+  items: z.array(fixPlanItemSchema),
+});
+
+export type FixPlanItem = z.infer<typeof fixPlanItemSchema>;
+export type FixPlanResult = z.infer<typeof fixPlanResultSchema>;
+
+/**
+ * Build the `gunk radar --fix-plan` checklist from a RadarResult: a pure
+ * filter-and-project over findings that carry a `suggestion`, in finding
+ * order. Findings without one just locate the problem (spec) and are
+ * excluded here rather than appearing with an empty suggestion.
+ */
+export function buildFixPlan(radar: RadarResult): FixPlanResult {
+  const items = radar.findings
+    .filter((finding): finding is ClaimFinding & { suggestion: NonNullable<ClaimFinding["suggestion"]> } =>
+      finding.suggestion !== undefined,
+    )
+    .map((finding) => ({
+      path: finding.path,
+      line: finding.line,
+      label: finding.label,
+      check: finding.check,
+      expected: finding.expected,
+      actual: finding.actual,
+      suggestion: finding.suggestion,
+    }));
+
+  return fixPlanResultSchema.parse({
+    schemaVersion: 1,
+    scannedAt: radar.scannedAt,
+    repoRoot: radar.repoRoot,
+    items,
+  });
 }
