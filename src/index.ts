@@ -1,7 +1,7 @@
 /** Public API: the engine seam and the contracts it speaks. */
-export { scan, persistScanResult } from "./scan.js";
+export { scan, persistScanResult, loadScanResult } from "./scan.js";
 export { loadConfig, defaultConfig, configSchema, CONFIG_FILE_NAME } from "./config.js";
-export type { GunkConfig } from "./config.js";
+export type { GunkConfig, Voice } from "./config.js";
 export { buildFileIndex } from "./file-index.js";
 export type { FileEntry, IndexedKind } from "./file-index.js";
 export { buildGitIndex } from "./git-index.js";
@@ -17,4 +17,15 @@ export {
 } from "./doc-graph.js";
 export type { DocGraph, DocRefKind, DocReference } from "./doc-graph.js";
 export { GunkError } from "./errors.js";
+export {
+  buildPileResult,
+  groupFindings,
+  pileResultSchema,
+  pileGroupSchema,
+  GROUP_LABELS,
+  LINK_GROUP_LABEL,
+} from "./pile.js";
+export type { GroupLabel, PileGroup, PileResult } from "./pile.js";
+export { writeReport, renderReportMarkdown, reportResultSchema } from "./report.js";
+export type { ReportResult } from "./report.js";
 export * from "./schema.js";

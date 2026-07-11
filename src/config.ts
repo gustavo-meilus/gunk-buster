@@ -26,6 +26,9 @@ export const configSchema = z.strictObject({
 
 export type GunkConfig = z.infer<typeof configSchema>;
 
+/** The human-output persona knob: default "chief", or "professional" to drop it entirely. */
+export type Voice = GunkConfig["voice"];
+
 /** The zero-config defaults. */
 export function defaultConfig(): GunkConfig {
   return configSchema.parse({});

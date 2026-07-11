@@ -1,10 +1,12 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import { classify, summarizeCounts } from "./classify.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import type { Detector } from "./detector.js";
 import { dumpDetector } from "./detectors/dump.js";
 import { buildDocGraph, findBrokenLinks } from "./doc-graph.js";
+import { GunkError } from "./errors.js";
 import { buildFileIndex } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
@@ -50,16 +52,59 @@ export async function scan(
   });
 }
 
+/** Where the persisted scan index lives, relative to the repo root. */
+const SCAN_JSON_RELATIVE_PATH = path.join(".gunk-buster", "scan.json");
+
 /**
  * Persist the scan index to `<repoRoot>/.gunk-buster/scan.json`. The
- * directory ships an internal .gitignore covering scan.json — the scan
- * output is ephemeral, per-machine, and must never become context gunk.
+ * directory ships an internal .gitignore covering scan.json and the reports
+ * directory (#7) — both are ephemeral/per-machine for now and must never
+ * become context gunk themselves; reports become tracked content only in a
+ * later milestone.
  */
 export async function persistScanResult(result: ScanResult): Promise<string> {
   const dir = path.join(result.repoRoot, ".gunk-buster");
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, ".gitignore"), "scan.json\n");
+  await writeFile(path.join(dir, ".gitignore"), "scan.json\nreports/\n");
   const scanPath = path.join(dir, "scan.json");
   await writeFile(scanPath, `${JSON.stringify(result, null, 2)}\n`);
   return scanPath;
+}
+
+/**
+ * Load the persisted scan index from `<repoRoot>/.gunk-buster/scan.json`.
+ * `pile` and `report` are read-only views over this file and never re-scan
+ * (#7). Throws a helpful GunkError when no scan has been run yet, or when
+ * the persisted file fails to parse against the schema (e.g. hand-edited or
+ * left over from an incompatible schemaVersion).
+ */
+export async function loadScanResult(repoRoot: string): Promise<ScanResult> {
+  const scanPath = path.join(repoRoot, SCAN_JSON_RELATIVE_PATH);
+
+  let raw: string;
+  try {
+    raw = await readFile(scanPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new GunkError(
+        `no scan index found at ${scanPath} — run "gunk scan" first`,
+      );
+    }
+    throw new GunkError(`cannot read scan index: ${String(error)}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new GunkError(`invalid scan index at ${scanPath}: ${String(error)}`);
+  }
+
+  const result = scanResultSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new GunkError(
+      `invalid scan index at ${scanPath}: ${z.prettifyError(result.error)}`,
+    );
+  }
+  return result.data;
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { GunkError } from "../src/errors.js";
-import { persistScanResult, scan } from "../src/scan.js";
+import { loadScanResult, persistScanResult, scan } from "../src/scan.js";
 import { scanResultSchema } from "../src/schema.js";
 import { createFixtureRepo, createTempDir, removeDir } from "./helpers/fixture.js";
 
@@ -69,12 +69,45 @@ describe("scan(repoRoot, config) — engine seam", () => {
       "utf8",
     );
     expect(internalIgnore).toContain("scan.json");
+    // reports/ must not become context gunk either (#7) — same ephemeral
+    // treatment as scan.json until a later milestone tracks it.
+    expect(internalIgnore).toContain("reports/");
   });
 
   it("throws a GunkError tool error when the directory is not a git repo", async () => {
     const dir = await createTempDir();
     try {
       await expect(scan(dir)).rejects.toBeInstanceOf(GunkError);
+    } finally {
+      await removeDir(dir);
+    }
+  });
+});
+
+describe("loadScanResult(repoRoot) — reading the persisted scan index back (#7)", () => {
+  let repo: string;
+
+  beforeAll(async () => {
+    repo = await createFixtureRepo("clean-repo");
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  it("round-trips exactly what persistScanResult wrote", async () => {
+    const result = await scan(repo);
+    await persistScanResult(result);
+
+    const loaded = await loadScanResult(repo);
+    expect(loaded).toEqual(result);
+  });
+
+  it("throws a helpful GunkError when no scan index exists yet", async () => {
+    const dir = await createTempDir();
+    try {
+      await expect(loadScanResult(dir)).rejects.toBeInstanceOf(GunkError);
+      await expect(loadScanResult(dir)).rejects.toThrow(/gunk scan/);
     } finally {
       await removeDir(dir);
     }
