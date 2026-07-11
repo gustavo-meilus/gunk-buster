@@ -83,8 +83,11 @@ The grouped human view of findings.
 **Structural finding / semantic finding**:
 Scan finds structural problems (graph facts); Radar finds semantic problems (claims contradicted by the repo).
 
+**Claim finding** _(Radar)_:
+A line-located finding that a claim in a doc is contradicted by a repo fact. Carries evidence, expected/actual, and optionally a mechanical suggestion. The remedy is an edit, never a trap — claim findings live outside the verdict lattice and bypass protections.
+
 **Radar**:
-The semantic audit of agent-context files.
+The semantic audit of docs and agent-context files — deterministic cross-referencing of claims against repo facts, never NLU.
 
 **Trap**:
 Move a file to the external vault, outside the repo and outside agent reach, with a tracked receipt.
