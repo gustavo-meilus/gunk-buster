@@ -4,7 +4,7 @@ import ignore from "ignore";
 import { remark } from "remark";
 import { visit } from "unist-util-visit";
 import { EXTERNAL_SCHEME, outboundReferencesOf } from "../doc-graph.js";
-import { labelFor, type RadarCheck, type RadarContext } from "../radar.js";
+import { labelFor, type RadarCheck, type RadarContext } from "../radar-check.js";
 import type { ClaimFinding } from "../schema.js";
 
 /**

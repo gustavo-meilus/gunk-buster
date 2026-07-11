@@ -2,79 +2,36 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { contextBloatCheck } from "./checks/context-bloat.js";
+import { deadCommandCheck } from "./checks/dead-command.js";
 import { deadPathCheck } from "./checks/dead-paths.js";
+import { packageManagerDriftCheck } from "./checks/package-manager-drift.js";
 import { loadConfig, type GunkConfig } from "./config.js";
-import { buildDocGraph, type DocGraph } from "./doc-graph.js";
+import { buildDocGraph } from "./doc-graph.js";
 import { GunkError } from "./errors.js";
 import { buildFileIndex, readIndexedFile, type FileEntry } from "./file-index.js";
-import { buildGitIndex, type GitIndex } from "./git-index.js";
+import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
+import { buildPackageGraph } from "./package-graph.js";
+import type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
 import { GUNK_BUSTER_GITIGNORE } from "./scan.js";
 import { radarResultSchema, type ClaimFinding, type ClaimLabel, type RadarResult } from "./schema.js";
 
-/**
- * One audit-surface file: a file-index entry restricted to the doc/
- * agent-context universe, with its content pre-read once. This is the whole
- * candidate universe for radar checks (docs/specs/mvp-2-radar.md "Audit
- * surface") — the label a check's finding gets falls out of `entry.kind`
- * (agent-context -> BAIT, doc -> MOLD), so checks never decide the label
- * themselves.
- */
-export interface AuditFile {
-  entry: FileEntry;
-  content: string;
-}
-
-/**
- * Everything a radar check may consult — the audit surface plus the same
- * repo graphs the scan builds, read-only. A check never decides labels or
- * protections: labels fall out of the audit surface's file kind, and claim
- * findings bypass protections entirely (spec).
- */
-export interface RadarContext {
-  surface: readonly AuditFile[];
-  fileIndex: readonly FileEntry[];
-  gitIndex: GitIndex;
-  docGraph: DocGraph;
-  config: GunkConfig;
-  /**
-   * Raw contents of the repo root's `.gitignore`, or `""` when none exists.
-   * The dead-path check (#11) is the only consumer so far: an ignored token
-   * (e.g. a build artifact path) is probably a stale build product, not a
-   * claim, so it must be skipped rather than flagged. Root-level only —
-   * nested `.gitignore` files are not consulted for this guard (a deliberate
-   * MVP simplification; the file index itself already honors nested
-   * `.gitignore` files when building the audit surface).
-   */
-  rootGitignore: string;
-}
-
-/**
- * A radar check examines the whole audit surface and emits zero or more
- * claim findings. This is the entire extension point (mirrors Detector for
- * scan): checks #10-#12 drop in as registry entries, nothing else changes.
- */
-export interface RadarCheck {
-  /** The check name every finding it emits carries in `check`. */
-  readonly name: string;
-  examine(ctx: RadarContext): ClaimFinding[];
-}
+export type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
+export { labelFor } from "./radar-check.js";
 
 /**
  * Every radar check, in registration order. The walking skeleton (#9)
  * proved the seam end to end with an empty registry; each check ticket
- * lands as a pure drop-in entry here.
+ * (#10-#12) landed as a pure drop-in entry here. Each check self-disables
+ * via its own `radar.checks.*` kill switch, so this array itself never
+ * needs to branch on config.
  */
-const CHECKS: readonly RadarCheck[] = [deadPathCheck, contextBloatCheck];
-
-/**
- * The label a finding in this audit-surface file gets: agent-context ->
- * BAIT, doc -> MOLD (spec). Exported so every future check (#10-#12) derives
- * a finding's label from this one function instead of re-deciding it.
- */
-export function labelFor(kind: AuditFile["entry"]["kind"]): ClaimLabel {
-  return kind === "agent-context" ? "BAIT" : "MOLD";
-}
+const CHECKS: readonly RadarCheck[] = [
+  packageManagerDriftCheck,
+  deadCommandCheck,
+  deadPathCheck,
+  contextBloatCheck,
+];
 
 /**
  * Build the audit surface: every doc and agent-context file in the index,
@@ -142,6 +99,7 @@ export async function radar(repoRoot: string, config?: GunkConfig): Promise<Rada
   const fileIndex = await buildFileIndex(root);
   const gitIndex = await buildGitIndex(root);
   const docGraph = await buildDocGraph(root, fileIndex);
+  const packages = await buildPackageGraph(root, fileIndex);
   const surface = await buildAuditSurface(root, fileIndex);
   const rootGitignore = await readRootGitignore(root);
 
@@ -150,6 +108,7 @@ export async function radar(repoRoot: string, config?: GunkConfig): Promise<Rada
     fileIndex,
     gitIndex,
     docGraph,
+    packages,
     config: effectiveConfig,
     rootGitignore,
   };

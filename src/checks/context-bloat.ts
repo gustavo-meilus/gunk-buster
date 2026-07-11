@@ -1,6 +1,6 @@
 import { compareDocStructures } from "../detectors/echo.js";
 import { docStructureOf } from "../doc-graph.js";
-import type { AuditFile, RadarCheck, RadarContext } from "../radar.js";
+import type { AuditFile, RadarCheck, RadarContext } from "../radar-check.js";
 import type { ClaimFinding } from "../schema.js";
 
 /**

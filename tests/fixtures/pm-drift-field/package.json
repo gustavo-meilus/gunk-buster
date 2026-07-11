@@ -1,0 +1,8 @@
+{
+  "name": "pm-drift-field-fixture",
+  "private": true,
+  "packageManager": "pnpm@9.1.0",
+  "scripts": {
+    "build": "tsc"
+  }
+}
