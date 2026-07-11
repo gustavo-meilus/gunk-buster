@@ -5,11 +5,17 @@ import { loadConfig, type GunkConfig } from "./config.js";
 import { GunkError } from "./errors.js";
 import { resolveRepoRoot } from "./git.js";
 import { buildPileResult } from "./pile.js";
-import { persistRadarResult, radar } from "./radar.js";
+import { buildFixPlan, persistRadarResult, radar, tryLoadRadarResult } from "./radar.js";
 import { writeReport } from "./report.js";
 import { loadScanResult, persistScanResult, scan } from "./scan.js";
-import type { ScanResult } from "./schema.js";
-import { renderPileHuman, renderRadarHuman, renderReportHuman, renderScanHuman } from "./voice.js";
+import type { RadarResult, ScanResult } from "./schema.js";
+import {
+  renderFixPlanHuman,
+  renderPileHuman,
+  renderRadarHuman,
+  renderReportHuman,
+  renderScanHuman,
+} from "./voice.js";
 
 /**
  * The CLI is a thin shell over the engine seam: scan/pile/report load or
@@ -25,13 +31,21 @@ function printJson(document: unknown): void {
 
 /**
  * The shared view preamble: resolve the repo, read its config (for the
- * voice), and load the persisted scan index — never re-scan (#7).
+ * voice), and load the persisted scan index — never re-scan (#7). Also
+ * loads the persisted radar index when one exists (#13) — `undefined` when
+ * `gunk radar` has never run here, so pile/report merge it in only when
+ * present and stay byte-identical to MVP 1 output otherwise.
  */
-async function loadViewContext(): Promise<{ config: GunkConfig; scanResult: ScanResult }> {
+async function loadViewContext(): Promise<{
+  config: GunkConfig;
+  scanResult: ScanResult;
+  radarResult: RadarResult | undefined;
+}> {
   const root = await resolveRepoRoot(process.cwd());
   const config = await loadConfig(root);
   const scanResult = await loadScanResult(root);
-  return { config, scanResult };
+  const radarResult = await tryLoadRadarResult(root);
+  return { config, scanResult, radarResult };
 }
 
 const program = new Command();
@@ -64,12 +78,23 @@ program
   .command("radar")
   .description("Run the radar checks over the current git repo and persist the radar index")
   .option("--json", "print the RadarResult document to stdout")
-  .action(async (options: { json?: boolean }) => {
+  .option(
+    "--fix-plan",
+    "render the aggregated per-finding suggestions as a checklist, instead of the findings themselves",
+  )
+  .action(async (options: { json?: boolean; fixPlan?: boolean }) => {
     const result = await radar(process.cwd());
     const radarPath = await persistRadarResult(result);
     const config = await loadConfig(result.repoRoot);
 
-    if (options.json) {
+    if (options.fixPlan) {
+      const fixPlan = buildFixPlan(result);
+      if (options.json) {
+        printJson(fixPlan);
+      } else {
+        process.stdout.write(`${renderFixPlanHuman(config.voice, fixPlan)}\n`);
+      }
+    } else if (options.json) {
       printJson(result);
     } else {
       process.stdout.write(`${renderRadarHuman(config.voice, result, radarPath)}\n`);
@@ -82,8 +107,8 @@ program
   .description("Show findings grouped by label, from the persisted scan index")
   .option("--json", "print the PileResult document to stdout")
   .action(async (options: { json?: boolean }) => {
-    const { config, scanResult } = await loadViewContext();
-    const pile = buildPileResult(scanResult);
+    const { config, scanResult, radarResult } = await loadViewContext();
+    const pile = buildPileResult(scanResult, radarResult);
 
     if (options.json) {
       printJson(pile);
@@ -100,8 +125,8 @@ program
   )
   .option("--json", "print the ReportResult document to stdout")
   .action(async (options: { json?: boolean }) => {
-    const { config, scanResult } = await loadViewContext();
-    const report = await writeReport(scanResult);
+    const { config, scanResult, radarResult } = await loadViewContext();
+    const report = await writeReport(scanResult, radarResult);
 
     if (options.json) {
       printJson(report);

@@ -3,9 +3,15 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { GunkError } from "../src/errors.js";
-import { loadRadarResult, persistRadarResult, radar } from "../src/radar.js";
+import {
+  buildFixPlan,
+  loadRadarResult,
+  persistRadarResult,
+  radar,
+  tryLoadRadarResult,
+} from "../src/radar.js";
 import { persistScanResult, scan } from "../src/scan.js";
-import { claimFindingSchema, radarResultSchema } from "../src/schema.js";
+import { claimFindingSchema, radarResultSchema, type RadarResult } from "../src/schema.js";
 import { createFixtureRepo, createTempDir, removeDir } from "./helpers/fixture.js";
 
 describe("claim-finding schema", () => {
@@ -165,6 +171,95 @@ describe("loadRadarResult(repoRoot) — reading the persisted radar index back",
       await expect(loadRadarResult(dir)).rejects.toThrow(/gunk radar/);
     } finally {
       await removeDir(dir);
+    }
+  });
+});
+
+describe("tryLoadRadarResult(repoRoot) — the optional read pile/report use (#13)", () => {
+  it("returns undefined when no radar index exists yet, without throwing", async () => {
+    const dir = await createTempDir();
+    try {
+      await expect(tryLoadRadarResult(dir)).resolves.toBeUndefined();
+    } finally {
+      await removeDir(dir);
+    }
+  });
+
+  it("returns the persisted radar result when one exists", async () => {
+    const repo = await createFixtureRepo("clean-repo");
+    try {
+      const result = await radar(repo);
+      await persistRadarResult(result);
+      await expect(tryLoadRadarResult(repo)).resolves.toEqual(result);
+    } finally {
+      await removeDir(repo);
+    }
+  });
+});
+
+describe("buildFixPlan(radar) — the `gunk radar --fix-plan` checklist (#13)", () => {
+  function radarWithFindings(findings: RadarResult["findings"]): RadarResult {
+    return {
+      schemaVersion: 1,
+      scannedAt: "2026-07-10T00:00:00.000Z",
+      repoRoot: "/repo",
+      counts: { byLabel: {}, byCheck: {} },
+      findings,
+    };
+  }
+
+  it("includes only findings that carry a suggestion", () => {
+    const result = radarWithFindings([
+      {
+        type: "claim",
+        path: "CLAUDE.md",
+        line: 3,
+        label: "BAIT",
+        check: "package-manager-drift",
+        evidence: [{ rule: "pm-mismatch", confidence: "CERTAIN", rationale: "..." }],
+        expected: "pnpm install",
+        actual: "npm install",
+        suggestion: { replace: "npm install", with: "pnpm install" },
+      },
+      {
+        type: "claim",
+        path: "CLAUDE.md",
+        line: 8,
+        label: "BAIT",
+        check: "dead-command",
+        evidence: [{ rule: "unknown-script", confidence: "CERTAIN", rationale: "..." }],
+        expected: "an existing script",
+        actual: "npm run typo",
+        // no suggestion
+      },
+    ]);
+
+    const fixPlan = buildFixPlan(result);
+    expect(fixPlan.items).toHaveLength(1);
+    expect(fixPlan.items[0]).toMatchObject({
+      path: "CLAUDE.md",
+      line: 3,
+      suggestion: { replace: "npm install", with: "pnpm install" },
+    });
+  });
+
+  it("carries the radar result's own scannedAt and repoRoot through", () => {
+    const result = radarWithFindings([]);
+    const fixPlan = buildFixPlan(result);
+    expect(fixPlan.scannedAt).toBe(result.scannedAt);
+    expect(fixPlan.repoRoot).toBe(result.repoRoot);
+    expect(fixPlan.items).toEqual([]);
+  });
+
+  it("produces the fix plan for a real fixture through the engine seam", async () => {
+    const repo = await createFixtureRepo("pm-drift-field");
+    try {
+      const result = await radar(repo, defaultConfig());
+      const fixPlan = buildFixPlan(result);
+      expect(fixPlan.items.length).toBeGreaterThan(0);
+      expect(fixPlan.items.every((item) => item.suggestion !== undefined)).toBe(true);
+    } finally {
+      await removeDir(repo);
     }
   });
 });
