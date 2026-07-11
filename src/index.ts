@@ -7,7 +7,9 @@ export type { FileEntry, IndexedKind } from "./file-index.js";
 export { buildGitIndex } from "./git-index.js";
 export type { GitIndex } from "./git-index.js";
 export {
+  allDocStructures,
   buildDocGraph,
+  docStructureOf,
   findBrokenLinks,
   inboundImagesOf,
   inboundLinksOf,
@@ -15,7 +17,7 @@ export {
   isReferencedByReadme,
   outboundReferencesOf,
 } from "./doc-graph.js";
-export type { DocGraph, DocRefKind, DocReference } from "./doc-graph.js";
+export type { DocGraph, DocRefKind, DocReference, DocStructure } from "./doc-graph.js";
 export { GunkError } from "./errors.js";
 export {
   buildPileResult,

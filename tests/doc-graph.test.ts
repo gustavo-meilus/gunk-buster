@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildFileIndex } from "../src/file-index.js";
 import {
   buildDocGraph,
+  extractDocStructure,
   inboundImagesOf,
   inboundLinksOf,
   isInNav,
@@ -133,5 +134,38 @@ describe("buildDocGraph(repoRoot, fileIndex) — queryable doc graph", () => {
 
   it("resolves reference-style links ([text][id] + [id]: target) the same as inline links", () => {
     expect(inboundLinksOf(graph, "docs/guide.md")).toContain("docs/nested/page.md");
+  });
+});
+
+describe("extractDocStructure(content) — title/heading skeleton extraction", () => {
+  it("takes the first depth-1 heading as the title and lists the remaining headings in order", () => {
+    const structure = extractDocStructure(
+      "# Release Playbook\n\nIntro.\n\n## Prerequisites\n\n## Build\n\n### Bundler\n",
+    );
+    expect(structure.title).toBe("Release Playbook");
+    expect(structure.headings).toEqual(["Prerequisites", "Build", "Bundler"]);
+  });
+
+  it("recognizes a setext (underlined) title as a depth-1 heading", () => {
+    const structure = extractDocStructure("Release Playbook\n================\n\n## Steps\n");
+    expect(structure.title).toBe("Release Playbook");
+    expect(structure.headings).toEqual(["Steps"]);
+  });
+
+  it("includes inline code in heading text", () => {
+    const structure = extractDocStructure("# Using `gunk scan`\n");
+    expect(structure.title).toBe("Using gunk scan");
+  });
+
+  it("returns a null title for a doc with no depth-1 heading, keeping its other headings", () => {
+    const structure = extractDocStructure("## Only a Section\n\ntext\n");
+    expect(structure.title).toBeNull();
+    expect(structure.headings).toEqual(["Only a Section"]);
+  });
+
+  it("treats a second depth-1 heading as an ordinary heading, not a competing title", () => {
+    const structure = extractDocStructure("# First\n\n# Second\n\n## Third\n");
+    expect(structure.title).toBe("First");
+    expect(structure.headings).toEqual(["Second", "Third"]);
   });
 });

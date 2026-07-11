@@ -5,6 +5,7 @@ import { classify, summarizeCounts } from "./classify.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import type { Detector } from "./detector.js";
 import { dumpDetector } from "./detectors/dump.js";
+import { echoDetector } from "./detectors/echo.js";
 import { buildDocGraph, findBrokenLinks } from "./doc-graph.js";
 import { GunkError } from "./errors.js";
 import { buildFileIndex } from "./file-index.js";
@@ -13,7 +14,7 @@ import { resolveRepoRoot } from "./git.js";
 import { scanResultSchema, type ScanResult } from "./schema.js";
 
 /** Every detector the scan runs, in registration order. */
-const DETECTORS: readonly Detector[] = [dumpDetector];
+const DETECTORS: readonly Detector[] = [dumpDetector, echoDetector];
 
 /**
  * The engine seam: run a read-only scan of the repo containing `repoRoot`
@@ -40,7 +41,7 @@ export async function scan(
   const gitIndex = await buildGitIndex(root);
   const docGraph = await buildDocGraph(root, fileIndex);
 
-  const fileFindings = classify(fileIndex, gitIndex, effectiveConfig, DETECTORS);
+  const fileFindings = classify(fileIndex, gitIndex, docGraph, effectiveConfig, DETECTORS);
   const linkFindings = findBrokenLinks(docGraph);
 
   return scanResultSchema.parse({
