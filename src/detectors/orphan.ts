@@ -1,7 +1,7 @@
 import type { Detector, DetectorContext } from "../detector.js";
 import { isNavFile, isReadmeFile } from "../doc-graph.js";
 import type { FileEntry } from "../file-index.js";
-import { containsSensitiveKeyword } from "../protections.js";
+import { isSensitiveEntry } from "../protections.js";
 import type { Evidence } from "../schema.js";
 
 /**
@@ -20,7 +20,7 @@ import type { Evidence } from "../schema.js";
  * The two labels split one detection: a sensitive orphan is RELIC and only
  * RELIC — GHOST deliberately stands down so a file is never piled twice
  * for the same fact. Sensitivity here must match the soft protection's
- * notion exactly (shared `containsSensitiveKeyword`), which is what
+ * notion exactly (the shared `isSensitiveEntry` composite), which is what
  * guarantees every RELIC verdict is capped at ASK_CHIEF, never SAFE.
  *
  * Only docs and assets can be orphans. Agent-context files, READMEs, and
@@ -71,19 +71,11 @@ export function unreferencedEvidence(entry: FileEntry, ctx: DetectorContext): Ev
   ];
 }
 
-/** Sensitive by path or by (doc-kind) content — the RELIC/GHOST split. */
-function isSensitive(entry: FileEntry, ctx: DetectorContext): boolean {
-  return (
-    containsSensitiveKeyword(entry.path) ||
-    containsSensitiveKeyword(ctx.contents.get(entry.path) ?? "")
-  );
-}
-
 /** GHOST — an orphaned doc or asset without sensitive content (see module doc). */
 export const ghostDetector: Detector = {
   label: "GHOST",
   examine(entry, ctx) {
-    if (isSensitive(entry, ctx)) return []; // RELIC's business
+    if (isSensitiveEntry(entry.path, ctx.contents)) return []; // RELIC's business
     return unreferencedEvidence(entry, ctx);
   },
 };
@@ -92,7 +84,7 @@ export const ghostDetector: Detector = {
 export const relicDetector: Detector = {
   label: "RELIC",
   examine(entry, ctx) {
-    if (!isSensitive(entry, ctx)) return [];
+    if (!isSensitiveEntry(entry.path, ctx.contents)) return [];
     return unreferencedEvidence(entry, ctx);
   },
 };

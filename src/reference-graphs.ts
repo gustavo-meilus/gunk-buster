@@ -1,7 +1,6 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { outboundReferencesOf, type DocGraph } from "./doc-graph.js";
-import type { FileEntry } from "./file-index.js";
+import { readIndexedFile, type FileEntry } from "./file-index.js";
 
 /**
  * Reference graphs 4–6 of the scan (see docs/specs/mvp-1-scan.md): the
@@ -75,10 +74,6 @@ function addMentions(
   }
 }
 
-async function readRepoFile(repoRoot: string, relPath: string): Promise<string> {
-  return readFile(path.join(repoRoot, ...relPath.split("/")), "utf8");
-}
-
 function isWorkflowFile(relPath: string): boolean {
   if (!relPath.startsWith(".github/workflows/")) return false;
   const ext = path.posix.extname(relPath).toLowerCase();
@@ -86,11 +81,12 @@ function isWorkflowFile(relPath: string): boolean {
 }
 
 /**
- * Collect every path mentioned by `package.json` scripts. Script text is
- * matched against repo-relative paths and, for a nested package.json,
- * against paths relative to its own directory (a script runs from there).
- * A file that is not valid JSON degrades to a plain mention scan of its
- * raw text — still no crash, and erring toward "referenced".
+ * Collect every path mentioned by `package.json` scripts, as repo-relative
+ * mentions (MVP 1 is a single-package world — ADR-0003 — so scripts run
+ * from the repo root; per-package relative resolution can land with
+ * workspaces in MVP 4 if ever needed). A file that is not valid JSON
+ * degrades to a plain mention scan of its raw text — still no crash, and
+ * erring toward "referenced".
  */
 async function packageScriptMentions(
   repoRoot: string,
@@ -98,9 +94,9 @@ async function packageScriptMentions(
   candidatePaths: readonly string[],
   into: Set<string>,
 ): Promise<void> {
-  const raw = await readRepoFile(repoRoot, packageJsonPath);
+  const raw = await readIndexedFile(repoRoot, packageJsonPath);
 
-  let scripts: Record<string, unknown> | undefined;
+  let scripts: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse(raw);
     scripts =
@@ -118,14 +114,6 @@ async function packageScriptMentions(
   if (scriptText === "") return;
 
   addMentions(scriptText, candidatePaths, into);
-
-  const packageDir = path.posix.dirname(packageJsonPath);
-  if (packageDir === ".") return;
-  const normalized = normalizeText(scriptText);
-  for (const candidate of candidatePaths) {
-    if (into.has(candidate) || !candidate.startsWith(`${packageDir}/`)) continue;
-    if (mentionsPath(normalized, candidate.slice(packageDir.length + 1))) into.add(candidate);
-  }
 }
 
 /** Build reference graphs 4–6 for a repo (see module doc). */
@@ -142,7 +130,11 @@ export async function buildReferenceGraphs(
 
   for (const entry of fileIndex) {
     if (entry.kind === "agent-context") {
-      addMentions(await readRepoFile(repoRoot, entry.path), candidatePaths, agentContextReferenced);
+      addMentions(
+        await readIndexedFile(repoRoot, entry.path),
+        candidatePaths,
+        agentContextReferenced,
+      );
       for (const ref of outboundReferencesOf(docGraph, entry.path)) {
         if (!ref.external && ref.resolved !== null && !ref.broken) {
           agentContextReferenced.add(ref.resolved);
@@ -151,7 +143,7 @@ export async function buildReferenceGraphs(
     } else if (path.posix.basename(entry.path) === "package.json") {
       await packageScriptMentions(repoRoot, entry.path, candidatePaths, packageScriptReferenced);
     } else if (isWorkflowFile(entry.path)) {
-      addMentions(await readRepoFile(repoRoot, entry.path), candidatePaths, ciReferenced);
+      addMentions(await readIndexedFile(repoRoot, entry.path), candidatePaths, ciReferenced);
     }
   }
 

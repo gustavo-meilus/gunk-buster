@@ -46,13 +46,26 @@ const SENSITIVE_KEYWORDS = ["migration", "security", "prod", "legal", "billing"]
  * Does `text` contain a sensitive keyword (migration/security/prod/legal/
  * billing)? Case-insensitive substring match, same laxity for path and
  * content on purpose: a false hit only tightens the verdict (cap at
- * ASK_CHIEF), never loosens it. Exported so the RELIC detector and the
- * sensitive-keyword soft protection share one notion of "sensitive" — if
- * they disagreed, a RELIC finding could escape its ASK_CHIEF cap.
+ * ASK_CHIEF), never loosens it.
  */
-export function containsSensitiveKeyword(text: string): boolean {
+function containsSensitiveKeyword(text: string): boolean {
   const lower = text.toLowerCase();
   return SENSITIVE_KEYWORDS.some((keyword) => lower.includes(keyword));
+}
+
+/**
+ * Is the file at `relPath` sensitive — by its path or by its (doc-kind)
+ * content? The one composite both the sensitive-keyword soft protection
+ * and the RELIC/GHOST split consult; with separate copies the two could
+ * drift and a RELIC finding could escape its ASK_CHIEF cap. `contents`
+ * only holds doc-kind files (see DetectorContext), so binary assets and
+ * generated files are judged by path alone.
+ */
+export function isSensitiveEntry(
+  relPath: string,
+  contents: ReadonlyMap<string, string>,
+): boolean {
+  return containsSensitiveKeyword(relPath) || containsSensitiveKeyword(contents.get(relPath) ?? "");
 }
 
 function matchesProtectedPath(relPath: string, protectedPath: string): boolean {
@@ -103,13 +116,8 @@ function softProtectionRules(
   }
 
   // Sensitive keywords protect via the path or the content (issue #5 —
-  // RELIC is defined by sensitive-keyword *content*). `contents` only holds
-  // doc-kind files (see DetectorContext), so binary assets and generated
-  // files are judged by path alone.
-  if (
-    containsSensitiveKeyword(entry.path) ||
-    containsSensitiveKeyword(contents.get(entry.path) ?? "")
-  ) {
+  // RELIC is defined by sensitive-keyword *content*).
+  if (isSensitiveEntry(entry.path, contents)) {
     rules.push("sensitive-keyword");
   }
 

@@ -1,9 +1,8 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Definition, Image, ImageReference, Link, LinkReference, Root } from "mdast";
 import { remark } from "remark";
 import { visit } from "unist-util-visit";
-import { DOC_EXTENSIONS, type FileEntry } from "./file-index.js";
+import { DOC_EXTENSIONS, readIndexedFile, type FileEntry } from "./file-index.js";
 import type { LinkFinding } from "./schema.js";
 
 /**
@@ -228,8 +227,7 @@ export async function buildDocGraph(
   const outbound = new Map<string, readonly DocReference[]>();
 
   for (const entry of parsable) {
-    const absPath = path.join(repoRoot, ...entry.path.split("/"));
-    const content = await readFile(absPath, "utf8");
+    const content = await readIndexedFile(repoRoot, entry.path);
     const refs = extractReferences(entry.path, content, filePaths);
     outbound.set(entry.path, refs);
     references.push(...refs);

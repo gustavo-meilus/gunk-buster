@@ -4,7 +4,7 @@ import { buildDocGraph } from "../src/doc-graph.js";
 import { buildFileIndex } from "../src/file-index.js";
 import { buildReferenceGraphs, mentionsPath, type ReferenceGraphs } from "../src/reference-graphs.js";
 import { scan } from "../src/scan.js";
-import type { FileFinding } from "../src/schema.js";
+import { pathsWithLabel } from "./helpers/findings.js";
 import { createFixtureRepo, removeDir } from "./helpers/fixture.js";
 
 /** Well outside the default 30-day recency window. */
@@ -75,10 +75,6 @@ describe("buildReferenceGraphs(repoRoot, fileIndex, docGraph) — full agent-con
 
   it("end to end: only the control doc is GHOST — every discovery-list source rescues its doc", async () => {
     const result = await scan(repo, defaultConfig());
-    const ghostPaths = result.findings
-      .filter((f): f is FileFinding => f.type === "file" && f.label === "GHOST")
-      .map((f) => f.path);
-
-    expect(ghostPaths).toEqual(["docs/orphan-control.md"]);
+    expect(pathsWithLabel(result, "GHOST")).toEqual(["docs/orphan-control.md"]);
   });
 });

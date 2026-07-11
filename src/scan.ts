@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { classify, summarizeCounts } from "./classify.js";
 import { loadConfig, type GunkConfig } from "./config.js";
@@ -6,7 +6,7 @@ import type { Detector } from "./detector.js";
 import { dumpDetector } from "./detectors/dump.js";
 import { ghostDetector, relicDetector } from "./detectors/orphan.js";
 import { buildDocGraph, findBrokenLinks } from "./doc-graph.js";
-import { buildFileIndex, type FileEntry } from "./file-index.js";
+import { buildFileIndex, readIndexedFile, type FileEntry } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
 import { buildReferenceGraphs } from "./reference-graphs.js";
@@ -27,7 +27,7 @@ async function readDocContents(
   const contents = new Map<string, string>();
   for (const entry of fileIndex) {
     if (entry.kind !== "doc") continue;
-    contents.set(entry.path, await readFile(path.join(repoRoot, ...entry.path.split("/")), "utf8"));
+    contents.set(entry.path, await readIndexedFile(repoRoot, entry.path));
   }
   return contents;
 }

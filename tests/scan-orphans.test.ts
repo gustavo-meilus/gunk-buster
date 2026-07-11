@@ -1,15 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { scan } from "../src/scan.js";
-import type { FileFinding, ScanResult } from "../src/schema.js";
+import type { ScanResult } from "../src/schema.js";
+import { fileFindings, pathsWithLabel } from "./helpers/findings.js";
 import { createFixtureRepo, removeDir } from "./helpers/fixture.js";
 
 /** Well outside the default 30-day recency window. */
 const NINETY_DAYS_AGO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-
-function fileFindings(result: ScanResult): FileFinding[] {
-  return result.findings.filter((f): f is FileFinding => f.type === "file");
-}
 
 describe("scan(repoRoot, config) — GHOST orphan detector (#5)", () => {
   let repo: string;
@@ -58,12 +55,10 @@ describe("scan(repoRoot, config) — GHOST orphan detector (#5)", () => {
   });
 
   it("flags exactly the two orphans — referenced docs/assets and the README itself never become GHOST", () => {
-    const ghostPaths = fileFindings(result)
-      .filter((f) => f.label === "GHOST")
-      .map((f) => f.path)
-      .sort();
-
-    expect(ghostPaths).toEqual(["assets/unused-diagram.png", "docs/old-plan.md"]);
+    expect(pathsWithLabel(result, "GHOST")).toEqual([
+      "assets/unused-diagram.png",
+      "docs/old-plan.md",
+    ]);
   });
 });
 
@@ -81,10 +76,7 @@ describe("scan(repoRoot, config) — a single reference from any surface defeats
   });
 
   function ghostPaths(): string[] {
-    return fileFindings(result)
-      .filter((f) => f.label === "GHOST")
-      .map((f) => f.path)
-      .sort();
+    return pathsWithLabel(result, "GHOST");
   }
 
   it("a doc referenced only by an agent-context markdown file (AGENTS.md link) is not GHOST", () => {

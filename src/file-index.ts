@@ -66,6 +66,17 @@ export function isCandidateKind(kind: IndexedKind): kind is FileKind {
   return kind !== "other";
 }
 
+/**
+ * Read an indexed file by its repo-relative forward-slash path. The index
+ * always records forward slashes; splitting on them before joining keeps
+ * the OS path correct on Windows too (ADR-0003: cross-platform paths from
+ * day one). Every graph builder that reads indexed content goes through
+ * this one helper so the rel-path-to-OS-path rule cannot drift.
+ */
+export async function readIndexedFile(repoRoot: string, relPath: string): Promise<string> {
+  return readFile(path.join(repoRoot, ...relPath.split("/")), "utf8");
+}
+
 export interface GeneratedMatch {
   /** Whole directory matched a known build/cache/coverage output dir, vs. just the extension. */
   reason: "build-dir" | "extension";
