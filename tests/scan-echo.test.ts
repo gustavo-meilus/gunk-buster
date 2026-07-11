@@ -8,7 +8,7 @@ import { createFixtureRepo, removeDir } from "./helpers/fixture.js";
 import { NINETY_DAYS_AGO, fileFindings } from "./helpers/findings.js";
 
 function echoFindings(result: ScanResult): FileFinding[] {
-  return fileFindings(result.findings).filter((f) => f.label === "ECHO");
+  return fileFindings(result).filter((f) => f.label === "ECHO");
 }
 
 describe("scan(repoRoot, config) — ECHO duplicate-doc detector (#6)", () => {

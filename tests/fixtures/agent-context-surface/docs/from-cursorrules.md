@@ -1,0 +1,3 @@
+# from-cursorrules
+
+Fixture doc.

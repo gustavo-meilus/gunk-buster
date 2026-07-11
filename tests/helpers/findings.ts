@@ -1,4 +1,4 @@
-import type { FileFinding } from "../../src/schema.js";
+import type { FileFinding, ScanResult } from "../../src/schema.js";
 
 /**
  * A commit date well outside the default 30-day recency window, so fixture
@@ -6,7 +6,15 @@ import type { FileFinding } from "../../src/schema.js";
  */
 export const NINETY_DAYS_AGO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
-/** Just the file findings (label + verdict) out of a mixed findings list. */
-export function fileFindings(findings: readonly { type: string }[]): FileFinding[] {
-  return findings.filter((f): f is FileFinding => f.type === "file");
+/** The file findings of a scan result (drops link findings). */
+export function fileFindings(result: ScanResult): FileFinding[] {
+  return result.findings.filter((f): f is FileFinding => f.type === "file");
+}
+
+/** Sorted paths of a scan result's findings under one label. */
+export function pathsWithLabel(result: ScanResult, label: FileFinding["label"]): string[] {
+  return fileFindings(result)
+    .filter((f) => f.label === label)
+    .map((f) => f.path)
+    .sort();
 }

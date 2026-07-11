@@ -14,10 +14,14 @@ export {
   inboundImagesOf,
   inboundLinksOf,
   isInNav,
+  isNavFile,
+  isReadmeFile,
   isReferencedByReadme,
   outboundReferencesOf,
 } from "./doc-graph.js";
 export type { DocGraph, DocRefKind, DocReference, DocStructure } from "./doc-graph.js";
+export { buildReferenceGraphs, mentionsPath } from "./reference-graphs.js";
+export type { ReferenceGraphs } from "./reference-graphs.js";
 export { GunkError } from "./errors.js";
 export {
   buildPileResult,

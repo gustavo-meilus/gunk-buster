@@ -2,6 +2,7 @@ import type { GunkConfig } from "./config.js";
 import type { DocGraph } from "./doc-graph.js";
 import type { FileEntry } from "./file-index.js";
 import type { GitIndex } from "./git-index.js";
+import type { ReferenceGraphs } from "./reference-graphs.js";
 import type { Evidence, Label } from "./schema.js";
 
 /**
@@ -13,6 +14,14 @@ export interface DetectorContext {
   fileIndex: readonly FileEntry[];
   gitIndex: GitIndex;
   docGraph: DocGraph;
+  references: ReferenceGraphs;
+  /**
+   * Doc-kind file contents by repo-relative path, pre-read once by the
+   * scan for any rule that judges content — e.g. the RELIC/soft-protection
+   * sensitive-keyword check. Only "doc" kind is read: assets are binary,
+   * generated files can be huge, and no content rule applies to either.
+   */
+  contents: ReadonlyMap<string, string>;
   config: GunkConfig;
 }
 

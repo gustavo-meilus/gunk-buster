@@ -18,7 +18,7 @@ describe("scan(repoRoot, config) — DUMP detector via the classification pipeli
     repos.push(repo);
 
     const result = await scan(repo, defaultConfig());
-    const findings = fileFindings(result.findings);
+    const findings = fileFindings(result);
     const byPath = new Map(findings.map((f) => [f.path, f]));
 
     // Only the four known generated artifacts get findings; README.md does not.
@@ -90,7 +90,7 @@ describe("scan(repoRoot, config) — DUMP detector via the classification pipeli
     commitAll(repo, "touch dist/bundle.js");
 
     const result = await scan(repo, defaultConfig());
-    const findings = fileFindings(result.findings);
+    const findings = fileFindings(result);
     const finding = findings.find((f) => f.path === "dist/bundle.js");
 
     expect(finding).toBeDefined();

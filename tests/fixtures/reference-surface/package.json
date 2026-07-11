@@ -1,0 +1,7 @@
+{
+  "name": "reference-surface-fixture",
+  "private": true,
+  "scripts": {
+    "docs:check": "node scripts/check.js docs/script-only.md"
+  }
+}

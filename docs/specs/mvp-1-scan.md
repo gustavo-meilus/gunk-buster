@@ -24,8 +24,8 @@ Docs (markdown), doc-referenced assets (images etc.), agent-context files, and g
 2. **Git index** — last-touched dates (via `git log`), for the age signal and recency protection.
 3. **Markdown/doc graph** — inbound/outbound links, image refs, README refs, docs nav/sidebar membership. Parsed with remark/mdast, not regex.
 4. **Agent-context graph** — what AGENTS.md, CLAUDE.md, GEMINI.md, .cursorrules, `.cursor/rules/**`, `.github/copilot-instructions.md`, `.claude/**`, `.agents/**`, `.codex/**`, `.opencode/**`, `.aider.conf.yml` reference.
-5. **Package-script refs** — files mentioned by `package.json` scripts (protection signal).
-6. **CI refs** — files mentioned by workflow files (protection signal).
+5. **Package-script refs** — files mentioned by `package.json` scripts (reference surface, per #5: a file a script mentions is not unreferenced and so can never be GHOST — not a soft protection).
+6. **CI refs** — files mentioned by workflow files (reference surface, same rule as package-script refs).
 
 **No import graph.** MVP 1 never judges code (permanent — ADR-0001).
 
@@ -35,7 +35,7 @@ Structural only — graph facts. Semantic checks (claims vs repo) are Radar's jo
 
 | Detection | Label | Method |
 | --- | --- | --- |
-| Orphan doc/asset | GHOST | No inbound links AND not in nav AND not in README AND not in any agent-context file |
+| Orphan doc/asset | GHOST | No inbound links AND not in nav AND not in README AND not in any agent-context file AND not referenced by package scripts or CI (per #5) |
 | Generated artifact committed by mistake | DUMP | Pattern match (build/cache/coverage/tool residue) |
 | Duplicate doc | ECHO | Title/heading similarity (no fuzzy content hashing in MVP 1) |
 | Orphaned + sensitive content | RELIC | GHOST + keyword check (migration/security/prod/legal/billing) |
@@ -79,7 +79,7 @@ strongest evidence WEAK    → ASK_CHIEF
       "label": "GHOST",
       "verdict": "PROPOSE",
       "evidence": [
-        { "rule": "unreferenced", "confidence": "STRONG", "rationale": "no inbound links, not in nav, not in README, not in any agent-context file" }
+        { "rule": "unreferenced", "confidence": "STRONG", "rationale": "no inbound links, not in nav, not in README, not in any agent-context file, not referenced by package scripts or CI" }
       ],
       "protections": []
     },

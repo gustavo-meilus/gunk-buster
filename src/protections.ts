@@ -42,6 +42,32 @@ const MANIFEST_NAMES = new Set([
 
 const SENSITIVE_KEYWORDS = ["migration", "security", "prod", "legal", "billing"];
 
+/**
+ * Does `text` contain a sensitive keyword (migration/security/prod/legal/
+ * billing)? Case-insensitive substring match, same laxity for path and
+ * content on purpose: a false hit only tightens the verdict (cap at
+ * ASK_CHIEF), never loosens it.
+ */
+function containsSensitiveKeyword(text: string): boolean {
+  const lower = text.toLowerCase();
+  return SENSITIVE_KEYWORDS.some((keyword) => lower.includes(keyword));
+}
+
+/**
+ * Is the file at `relPath` sensitive — by its path or by its (doc-kind)
+ * content? The one composite both the sensitive-keyword soft protection
+ * and the RELIC/GHOST split consult; with separate copies the two could
+ * drift and a RELIC finding could escape its ASK_CHIEF cap. `contents`
+ * only holds doc-kind files (see DetectorContext), so binary assets and
+ * generated files are judged by path alone.
+ */
+export function isSensitiveEntry(
+  relPath: string,
+  contents: ReadonlyMap<string, string>,
+): boolean {
+  return containsSensitiveKeyword(relPath) || containsSensitiveKeyword(contents.get(relPath) ?? "");
+}
+
 function matchesProtectedPath(relPath: string, protectedPath: string): boolean {
   const normalized = protectedPath.endsWith("/") ? protectedPath.slice(0, -1) : protectedPath;
   return relPath === normalized || relPath.startsWith(`${normalized}/`);
@@ -74,7 +100,12 @@ function hardProtectionRules(entry: FileEntry, config: GunkConfig): string[] {
   return rules;
 }
 
-function softProtectionRules(entry: FileEntry, gitIndex: GitIndex, config: GunkConfig): string[] {
+function softProtectionRules(
+  entry: FileEntry,
+  gitIndex: GitIndex,
+  contents: ReadonlyMap<string, string>,
+  config: GunkConfig,
+): string[] {
   const rules: string[] = [];
 
   const lastTouched = gitIndex.get(entry.path);
@@ -84,8 +115,9 @@ function softProtectionRules(entry: FileEntry, gitIndex: GitIndex, config: GunkC
     if (ageMs < windowMs) rules.push("recently-modified");
   }
 
-  const lowerPath = entry.path.toLowerCase();
-  if (SENSITIVE_KEYWORDS.some((keyword) => lowerPath.includes(keyword))) {
+  // Sensitive keywords protect via the path or the content (issue #5 —
+  // RELIC is defined by sensitive-keyword *content*).
+  if (isSensitiveEntry(entry.path, contents)) {
     rules.push("sensitive-keyword");
   }
 
@@ -96,10 +128,11 @@ function softProtectionRules(entry: FileEntry, gitIndex: GitIndex, config: GunkC
 export function classifyProtections(
   entry: FileEntry,
   gitIndex: GitIndex,
+  contents: ReadonlyMap<string, string>,
   config: GunkConfig,
 ): FileProtections {
   return {
     hard: hardProtectionRules(entry, config),
-    soft: softProtectionRules(entry, gitIndex, config),
+    soft: softProtectionRules(entry, gitIndex, contents, config),
   };
 }
