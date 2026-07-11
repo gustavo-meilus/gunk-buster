@@ -106,7 +106,7 @@ export function isNavFile(relPath: string): boolean {
  * every real URI scheme is two or more characters, but a drive letter is
  * exactly one (ADR-0003: cross-platform paths from day one).
  */
-const EXTERNAL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]+:/;
+export const EXTERNAL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]+:/;
 
 /**
  * Resolve one raw link/image target against the file it was written in.
