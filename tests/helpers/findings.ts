@@ -1,4 +1,4 @@
-import type { FileFinding, ScanResult } from "../../src/schema.js";
+import type { ClaimFinding, FileFinding, RadarResult, ScanResult } from "../../src/schema.js";
 
 /**
  * A commit date well outside the default 30-day recency window, so fixture
@@ -17,4 +17,9 @@ export function pathsWithLabel(result: ScanResult, label: FileFinding["label"]):
     .filter((f) => f.label === label)
     .map((f) => f.path)
     .sort();
+}
+
+/** A radar result's claim findings produced by one check. */
+export function claimFindingsFor(result: RadarResult, check: string): ClaimFinding[] {
+  return result.findings.filter((f) => f.check === check);
 }
