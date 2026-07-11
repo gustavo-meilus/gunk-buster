@@ -2,7 +2,7 @@ import path from "node:path";
 import type { Voice } from "./config.js";
 import type { PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
-import type { Finding, ScanResult, Verdict } from "./schema.js";
+import type { Finding, RadarResult, ScanResult, Verdict } from "./schema.js";
 
 /**
  * The Chief voice (CONTEXT.md "Chief"): compact, playful, concrete human
@@ -36,6 +36,25 @@ export function renderScanHuman(voice: Voice, result: ScanResult, scanPath: stri
   return [
     `Chief, scan's done: ${result.repoRoot}`,
     `${count} on the pile.`,
+    `Index stashed at ${rel}.`,
+  ].join("\n");
+}
+
+export function renderRadarHuman(voice: Voice, result: RadarResult, radarPath: string): string {
+  const rel = toRepoRelative(result.repoRoot, radarPath);
+  const count = pluralFindings(result.findings.length);
+
+  if (voice === "professional") {
+    return [
+      `Radar complete: ${result.repoRoot}`,
+      `${count}.`,
+      `Radar index written to ${rel}.`,
+    ].join("\n");
+  }
+
+  return [
+    `Chief, radar's swept: ${result.repoRoot}`,
+    `${count} caught on the sweep.`,
     `Index stashed at ${rel}.`,
   ].join("\n");
 }

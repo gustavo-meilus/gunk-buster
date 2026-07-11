@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { PileResult } from "../src/pile.js";
 import type { ReportResult } from "../src/report.js";
-import { renderPileHuman, renderReportHuman, renderScanHuman } from "../src/voice.js";
-import type { ScanResult } from "../src/schema.js";
+import { renderPileHuman, renderRadarHuman, renderReportHuman, renderScanHuman } from "../src/voice.js";
+import type { RadarResult, ScanResult } from "../src/schema.js";
 
 const scanResult: ScanResult = {
   schemaVersion: 1,
@@ -60,7 +60,29 @@ const reportResult: ReportResult = {
   counts: scanResult.counts,
 };
 
+const radarResult: RadarResult = {
+  schemaVersion: 1,
+  scannedAt: "2026-07-10T00:00:00.000Z",
+  repoRoot: "/repo",
+  counts: { byLabel: {}, byCheck: {} },
+  findings: [],
+};
+
+const radarPath = "/repo/.gunk-buster/radar.json";
+
 describe("voice — Chief default, professional override, persona-free JSON by construction", () => {
+  it("renderRadarHuman: chief voice addresses the Chief and includes the radar path", () => {
+    const text = renderRadarHuman("chief", radarResult, radarPath);
+    expect(text).toContain("Chief");
+    expect(text).toContain("radar.json");
+  });
+
+  it("renderRadarHuman: professional voice drops the persona but keeps the radar path", () => {
+    const text = renderRadarHuman("professional", radarResult, radarPath);
+    expect(text.toLowerCase()).not.toContain("chief");
+    expect(text).toContain("radar.json");
+  });
+
   it("renderScanHuman: chief voice addresses the Chief and is playful", () => {
     const text = renderScanHuman("chief", scanResult, scanPath);
     expect(text).toContain("Chief");

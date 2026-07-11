@@ -34,4 +34,6 @@ export {
 export type { GroupLabel, PileGroup, PileResult } from "./pile.js";
 export { writeReport, renderReportMarkdown, reportResultSchema } from "./report.js";
 export type { ReportResult } from "./report.js";
+export { radar, persistRadarResult, loadRadarResult, labelFor, summarizeRadarCounts } from "./radar.js";
+export type { AuditFile, RadarCheck, RadarContext } from "./radar.js";
 export * from "./schema.js";

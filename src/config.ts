@@ -11,6 +11,25 @@ import { GunkError } from "./errors.js";
 
 export const CONFIG_FILE_NAME = "gunk.config.json";
 
+/**
+ * Kill switches for the four radar checks (docs/specs/mvp-2-radar.md) — all
+ * on by default, the escape hatch for repos with a deliberately unusual
+ * setup (e.g. multiple lockfiles on purpose).
+ */
+export const radarChecksSchema = z.strictObject({
+  packageManagerDrift: z.boolean().default(true),
+  deadCommands: z.boolean().default(true),
+  deadPaths: z.boolean().default(true),
+  contextBloat: z.boolean().default(true),
+});
+
+/** The `radar` config block: check kill switches plus the context-bloat word budget. */
+export const radarConfigSchema = z.strictObject({
+  checks: radarChecksSchema.default(() => radarChecksSchema.parse({})),
+  /** Word-count threshold for the context-bloat check's WEAK rule. */
+  bloatWordBudget: z.int().positive().default(2500),
+});
+
 // strictObject: an unknown knob (e.g. a typo) is a tool error, never
 // silently dropped — same strictness as an invalid value.
 export const configSchema = z.strictObject({
@@ -22,6 +41,8 @@ export const configSchema = z.strictObject({
   recencyWindowDays: z.int().positive().default(30),
   /** Extra Chief-protected paths, on top of the built-in hard protections. */
   protectedPaths: z.array(z.string()).default([]),
+  /** Radar (MVP 2) check configuration. */
+  radar: radarConfigSchema.default(() => radarConfigSchema.parse({})),
 });
 
 export type GunkConfig = z.infer<typeof configSchema>;

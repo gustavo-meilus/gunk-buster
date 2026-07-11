@@ -10,6 +10,8 @@ export const CONFIDENCES = ["CERTAIN", "STRONG", "WEAK"] as const;
 export const VERDICTS = ["SAFE", "PROPOSE", "ASK_CHIEF", "KEEP"] as const;
 export const LABELS = ["GHOST", "DUMP", "ECHO", "RELIC"] as const;
 export const FILE_KINDS = ["doc", "asset", "agent-context", "generated"] as const;
+/** Claim-finding labels (MVP 2 — radar): BAIT for agent-context, MOLD for ordinary docs. */
+export const CLAIM_LABELS = ["BAIT", "MOLD"] as const;
 
 export const evidenceSchema = z.object({
   rule: z.string(),
@@ -50,12 +52,63 @@ export const scanResultSchema = z.object({
   findings: z.array(findingSchema),
 });
 
+/**
+ * A deterministic in-place rewrite for a claim finding — present only when
+ * one exists (e.g. rewriting `npm install` to the repo's true package
+ * manager). Findings without a safe rewrite just locate the problem.
+ */
+export const suggestionSchema = z.object({
+  replace: z.string(),
+  with: z.string(),
+});
+
+/**
+ * The claim.json contract's finding type (docs/specs/mvp-2-radar.md): a
+ * wrong claim located at a line, whose remedy is an edit rather than a trap.
+ * Claim findings live OUTSIDE the verdict lattice — no `verdict` field, and
+ * (like link findings) they bypass hard and soft protections entirely: a
+ * false claim in a sensitive or recently-edited file is exactly as false.
+ */
+export const claimFindingSchema = z.object({
+  type: z.literal("claim"),
+  path: z.string(),
+  line: z.int().positive(),
+  label: z.enum(CLAIM_LABELS),
+  /** The check that produced this finding, e.g. "package-manager-drift". */
+  check: z.string(),
+  evidence: z.array(evidenceSchema),
+  expected: z.string(),
+  actual: z.string(),
+  suggestion: suggestionSchema.optional(),
+});
+
+/**
+ * The radar.json contract, schemaVersion 1 — mirrors scanResultSchema but
+ * owns its own schema version and counts shape (by claim label, by check
+ * name) since claim findings are a disjoint universe from file/link
+ * findings. Scan and radar never write each other's files.
+ */
+export const radarResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  scannedAt: z.iso.datetime(),
+  repoRoot: z.string(),
+  counts: z.object({
+    byLabel: z.partialRecord(z.enum(CLAIM_LABELS), z.int().nonnegative()),
+    byCheck: z.record(z.string(), z.int().nonnegative()),
+  }),
+  findings: z.array(claimFindingSchema),
+});
+
 export type Confidence = (typeof CONFIDENCES)[number];
 export type Verdict = (typeof VERDICTS)[number];
 export type Label = (typeof LABELS)[number];
 export type FileKind = (typeof FILE_KINDS)[number];
+export type ClaimLabel = (typeof CLAIM_LABELS)[number];
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type FileFinding = z.infer<typeof fileFindingSchema>;
 export type LinkFinding = z.infer<typeof linkFindingSchema>;
 export type Finding = z.infer<typeof findingSchema>;
 export type ScanResult = z.infer<typeof scanResultSchema>;
+export type Suggestion = z.infer<typeof suggestionSchema>;
+export type ClaimFinding = z.infer<typeof claimFindingSchema>;
+export type RadarResult = z.infer<typeof radarResultSchema>;
