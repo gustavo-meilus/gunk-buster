@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { deadPathCheck } from "./checks/dead-paths.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import { buildDocGraph, type DocGraph } from "./doc-graph.js";
 import { GunkError } from "./errors.js";
@@ -35,6 +36,16 @@ export interface RadarContext {
   gitIndex: GitIndex;
   docGraph: DocGraph;
   config: GunkConfig;
+  /**
+   * Raw contents of the repo root's `.gitignore`, or `""` when none exists.
+   * The dead-path check (#11) is the only consumer so far: an ignored token
+   * (e.g. a build artifact path) is probably a stale build product, not a
+   * claim, so it must be skipped rather than flagged. Root-level only —
+   * nested `.gitignore` files are not consulted for this guard (a deliberate
+   * MVP simplification; the file index itself already honors nested
+   * `.gitignore` files when building the audit surface).
+   */
+  rootGitignore: string;
 }
 
 /**
@@ -49,11 +60,11 @@ export interface RadarCheck {
 }
 
 /**
- * Every radar check, in registration order. Empty in this ticket (#9) — the
- * walking skeleton proves the seam end to end before the first real check
- * (package-manager-drift, #10) lands as a pure drop-in.
+ * Every radar check, in registration order. dead-path (#11) is the first
+ * real check to land; the walking skeleton (#9) proved the seam end to end
+ * with an empty registry first.
  */
-const CHECKS: readonly RadarCheck[] = [];
+const CHECKS: readonly RadarCheck[] = [deadPathCheck];
 
 /**
  * The label a finding in this audit-surface file gets: agent-context ->
@@ -79,6 +90,20 @@ async function buildAuditSurface(
     surface.push({ entry, content: await readIndexedFile(repoRoot, entry.path) });
   }
   return surface;
+}
+
+/**
+ * Read the repo root's `.gitignore` verbatim, or `""` when the repo has
+ * none — never a tool error, since a missing `.gitignore` is a perfectly
+ * normal repo state (mirrors loadConfig's ENOENT-is-not-an-error handling).
+ */
+async function readRootGitignore(repoRoot: string): Promise<string> {
+  try {
+    return await readFile(path.join(repoRoot, ".gitignore"), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw new GunkError(`cannot read .gitignore: ${String(error)}`);
+  }
 }
 
 /** Tally findings into the radar.json `counts` block. */
@@ -117,8 +142,16 @@ export async function radar(repoRoot: string, config?: GunkConfig): Promise<Rada
   const gitIndex = await buildGitIndex(root);
   const docGraph = await buildDocGraph(root, fileIndex);
   const surface = await buildAuditSurface(root, fileIndex);
+  const rootGitignore = await readRootGitignore(root);
 
-  const ctx: RadarContext = { surface, fileIndex, gitIndex, docGraph, config: effectiveConfig };
+  const ctx: RadarContext = {
+    surface,
+    fileIndex,
+    gitIndex,
+    docGraph,
+    config: effectiveConfig,
+    rootGitignore,
+  };
   const findings = CHECKS.flatMap((check) => check.examine(ctx));
 
   return radarResultSchema.parse({
