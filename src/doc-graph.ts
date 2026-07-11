@@ -318,6 +318,11 @@ export function docStructureOf(graph: DocGraph, docPath: string): DocStructure |
   return graph.structures.get(docPath) ?? null;
 }
 
+/** Every parsed doc's [path, skeleton], sorted by path — the ECHO detector's counterpart universe. */
+export function allDocStructures(graph: DocGraph): readonly (readonly [string, DocStructure])[] {
+  return [...graph.structures.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
 /** Paths of docs that link to `targetPath` (valid, resolved link references only — not images). */
 export function inboundLinksOf(graph: DocGraph, targetPath: string): readonly string[] {
   return [...(graph.inboundLinks.get(targetPath) ?? [])];

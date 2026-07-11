@@ -5,14 +5,10 @@ import type { DocStructure } from "../src/doc-graph.js";
 import { scan } from "../src/scan.js";
 import type { FileFinding, ScanResult } from "../src/schema.js";
 import { createFixtureRepo, removeDir } from "./helpers/fixture.js";
-
-/** Well outside the default 30-day recency window. */
-const NINETY_DAYS_AGO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+import { NINETY_DAYS_AGO, fileFindings } from "./helpers/findings.js";
 
 function echoFindings(result: ScanResult): FileFinding[] {
-  return result.findings.filter(
-    (f): f is FileFinding => f.type === "file" && f.label === "ECHO",
-  );
+  return fileFindings(result.findings).filter((f) => f.label === "ECHO");
 }
 
 describe("scan(repoRoot, config) — ECHO duplicate-doc detector (#6)", () => {

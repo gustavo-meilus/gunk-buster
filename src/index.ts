@@ -7,9 +7,9 @@ export type { FileEntry, IndexedKind } from "./file-index.js";
 export { buildGitIndex } from "./git-index.js";
 export type { GitIndex } from "./git-index.js";
 export {
+  allDocStructures,
   buildDocGraph,
   docStructureOf,
-  extractDocStructure,
   findBrokenLinks,
   inboundImagesOf,
   inboundLinksOf,

@@ -3,15 +3,8 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { scan } from "../src/scan.js";
-import type { FileFinding } from "../src/schema.js";
 import { commitAll, createFixtureRepo, removeDir } from "./helpers/fixture.js";
-
-/** Well outside the default 30-day recency window. */
-const NINETY_DAYS_AGO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-
-function fileFindings(findings: readonly { type: string }[]): FileFinding[] {
-  return findings.filter((f): f is FileFinding => f.type === "file");
-}
+import { NINETY_DAYS_AGO, fileFindings } from "./helpers/findings.js";
 
 describe("scan(repoRoot, config) — DUMP detector via the classification pipeline (#3)", () => {
   const repos: string[] = [];
