@@ -1,23 +1,43 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { classify, summarizeCounts } from "./classify.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import type { Detector } from "./detector.js";
 import { dumpDetector } from "./detectors/dump.js";
+import { ghostDetector, relicDetector } from "./detectors/orphan.js";
 import { buildDocGraph, findBrokenLinks } from "./doc-graph.js";
-import { buildFileIndex } from "./file-index.js";
+import { buildFileIndex, type FileEntry } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
+import { buildReferenceGraphs } from "./reference-graphs.js";
 import { scanResultSchema, type ScanResult } from "./schema.js";
 
 /** Every detector the scan runs, in registration order. */
-const DETECTORS: readonly Detector[] = [dumpDetector];
+const DETECTORS: readonly Detector[] = [dumpDetector, ghostDetector, relicDetector];
+
+/**
+ * Pre-read doc-kind contents once for content-judging rules (RELIC, the
+ * sensitive-keyword soft protection). Docs only: assets are binary,
+ * generated files can be huge, and no content rule applies to either.
+ */
+async function readDocContents(
+  repoRoot: string,
+  fileIndex: readonly FileEntry[],
+): Promise<ReadonlyMap<string, string>> {
+  const contents = new Map<string, string>();
+  for (const entry of fileIndex) {
+    if (entry.kind !== "doc") continue;
+    contents.set(entry.path, await readFile(path.join(repoRoot, ...entry.path.split("/")), "utf8"));
+  }
+  return contents;
+}
 
 /**
  * The engine seam: run a read-only scan of the repo containing `repoRoot`
  * and return the ScanResult (exactly the scan.json document).
  *
- * Builds the scan graphs (file index, git index, doc graph), then runs the
+ * Builds the scan graphs (file index, git index, doc graph, reference
+ * graphs), then runs the
  * classification pipeline (ADR-0002) over them: every registered detector
  * examines every candidate, and the pure verdict function turns evidence
  * and protections into a verdict per finding. Broken markdown links are a
@@ -37,8 +57,13 @@ export async function scan(
   const fileIndex = await buildFileIndex(root);
   const gitIndex = await buildGitIndex(root);
   const docGraph = await buildDocGraph(root, fileIndex);
+  const references = await buildReferenceGraphs(root, fileIndex, docGraph);
+  const contents = await readDocContents(root, fileIndex);
 
-  const fileFindings = classify(fileIndex, gitIndex, effectiveConfig, DETECTORS);
+  const fileFindings = classify(
+    { fileIndex, gitIndex, docGraph, references, contents, config: effectiveConfig },
+    DETECTORS,
+  );
   const linkFindings = findBrokenLinks(docGraph);
 
   return scanResultSchema.parse({

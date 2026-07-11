@@ -68,11 +68,20 @@ function basename(relPath: string): string {
   return segments[segments.length - 1] ?? relPath;
 }
 
-function isReadmeFile(relPath: string): boolean {
+/**
+ * Is `relPath` a README? READMEs (and nav files) are reference-surface
+ * roots: they exist to point at everything else, and repo hosts surface
+ * them by convention, so "nothing links to the README" is the normal state
+ * of a healthy repo — never orphan evidence. Exported so the GHOST detector
+ * excludes them from orphan candidacy using the doc graph's own notion of
+ * what a README/nav file is.
+ */
+export function isReadmeFile(relPath: string): boolean {
   return basename(relPath) === "README.md";
 }
 
-function isNavFile(relPath: string): boolean {
+/** Is `relPath` a recognized docs nav/sidebar file? See `isReadmeFile` for why these are never orphan candidates. */
+export function isNavFile(relPath: string): boolean {
   return NAV_FILE_NAMES.has(basename(relPath));
 }
 
