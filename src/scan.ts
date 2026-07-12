@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { classify, summarizeCounts } from "./classify.js";
+import { classify, summarizeCounts, type UnhashedFileFinding } from "./classify.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import type { Detector } from "./detector.js";
 import { dumpDetector } from "./detectors/dump.js";
@@ -9,11 +9,11 @@ import { echoDetector } from "./detectors/echo.js";
 import { ghostDetector, relicDetector } from "./detectors/orphan.js";
 import { buildDocGraph, findBrokenLinks } from "./doc-graph.js";
 import { GunkError } from "./errors.js";
-import { buildFileIndex, readIndexedFile, type FileEntry } from "./file-index.js";
+import { buildFileIndex, hashIndexedFile, readIndexedFile, type FileEntry } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
 import { buildReferenceGraphs } from "./reference-graphs.js";
-import { scanResultSchema, type ScanResult } from "./schema.js";
+import { scanResultSchema, type FileFinding, type ScanResult } from "./schema.js";
 
 /** Every detector the scan runs, in registration order. */
 const DETECTORS: readonly Detector[] = [
@@ -38,6 +38,27 @@ async function readDocContents(
     contents.set(entry.path, await readIndexedFile(repoRoot, entry.path));
   }
   return contents;
+}
+
+/**
+ * Attach the staleness-anchor `contentHash` to every file finding
+ * (docs/specs/mvp-3-trap.md, scan.json schemaVersion 2). Hashed once per
+ * distinct path even when a file carries findings under more than one
+ * label, so a single scan never reads the same bytes twice.
+ */
+async function withContentHashes(
+  repoRoot: string,
+  findings: readonly UnhashedFileFinding[],
+): Promise<FileFinding[]> {
+  const hashByPath = new Map<string, string>();
+  for (const finding of findings) {
+    if (hashByPath.has(finding.path)) continue;
+    hashByPath.set(finding.path, await hashIndexedFile(repoRoot, finding.path));
+  }
+  return findings.map((finding) => ({
+    ...finding,
+    contentHash: hashByPath.get(finding.path)!,
+  }));
 }
 
 /**
@@ -68,14 +89,17 @@ export async function scan(
   const references = await buildReferenceGraphs(root, fileIndex, docGraph);
   const contents = await readDocContents(root, fileIndex);
 
-  const fileFindings = classify(
-    { fileIndex, gitIndex, docGraph, references, contents, config: effectiveConfig },
-    DETECTORS,
+  const fileFindings = await withContentHashes(
+    root,
+    classify(
+      { fileIndex, gitIndex, docGraph, references, contents, config: effectiveConfig },
+      DETECTORS,
+    ),
   );
   const linkFindings = findBrokenLinks(docGraph);
 
   return scanResultSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     scannedAt: new Date().toISOString(),
     repoRoot: root,
     counts: summarizeCounts(fileFindings),

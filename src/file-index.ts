@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import ignore, { type Ignore } from "ignore";
@@ -75,6 +76,17 @@ export function isCandidateKind(kind: IndexedKind): kind is FileKind {
  */
 export async function readIndexedFile(repoRoot: string, relPath: string): Promise<string> {
   return readFile(path.join(repoRoot, ...relPath.split("/")), "utf8");
+}
+
+/**
+ * Hash an indexed file's raw bytes as "sha256:<hex>" — the staleness anchor
+ * for MVP 3 (docs/specs/mvp-3-trap.md). Raw bytes rather than the decoded
+ * text `readIndexedFile` returns: asset kinds are binary and byte-identity
+ * (not text-identity) is what trap/restore/keep all pin to.
+ */
+export async function hashIndexedFile(repoRoot: string, relPath: string): Promise<string> {
+  const bytes = await readFile(path.join(repoRoot, ...relPath.split("/")));
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
 export interface GeneratedMatch {

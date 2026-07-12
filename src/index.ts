@@ -2,7 +2,7 @@
 export { scan, persistScanResult, loadScanResult } from "./scan.js";
 export { loadConfig, defaultConfig, configSchema, CONFIG_FILE_NAME } from "./config.js";
 export type { GunkConfig, Voice } from "./config.js";
-export { buildFileIndex } from "./file-index.js";
+export { buildFileIndex, hashIndexedFile } from "./file-index.js";
 export type { FileEntry, IndexedKind } from "./file-index.js";
 export { buildGitIndex } from "./git-index.js";
 export type { GitIndex } from "./git-index.js";

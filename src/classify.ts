@@ -12,8 +12,14 @@ import { computeVerdict } from "./verdict.js";
  * the spec orders it. The caller (the scan) builds the DetectorContext —
  * every scan graph plus config — once; this function stays pure over it.
  */
-export function classify(ctx: DetectorContext, detectors: readonly Detector[]): FileFinding[] {
-  const findings: FileFinding[] = [];
+/** A file finding before the scan stamps its contentHash (#15). */
+export type UnhashedFileFinding = Omit<FileFinding, "contentHash">;
+
+export function classify(
+  ctx: DetectorContext,
+  detectors: readonly Detector[],
+): UnhashedFileFinding[] {
+  const findings: UnhashedFileFinding[] = [];
 
   for (const entry of ctx.fileIndex) {
     // Code is always hard-protected (ADR-0001) and this is the only place

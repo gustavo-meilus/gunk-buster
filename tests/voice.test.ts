@@ -12,7 +12,7 @@ import {
 import type { RadarResult, ScanResult } from "../src/schema.js";
 
 const scanResult: ScanResult = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   scannedAt: "2026-07-10T00:00:00.000Z",
   repoRoot: "/repo",
   counts: { byVerdict: { SAFE: 1 }, byLabel: { DUMP: 1 } },
@@ -31,6 +31,7 @@ const scanResult: ScanResult = {
         },
       ],
       protections: [],
+      contentHash: "sha256:" + "a".repeat(64),
     },
   ],
 };

@@ -27,6 +27,14 @@ export const fileFindingSchema = z.object({
   verdict: z.enum(VERDICTS),
   evidence: z.array(evidenceSchema),
   protections: z.array(z.string()),
+  /**
+   * The staleness anchor for MVP 3 (docs/specs/mvp-3-trap.md): sha256 of the
+   * file's raw bytes at scan time, formatted "sha256:<hex>". Trap re-hashes
+   * against it, restore proves byte-identity with it, keep decisions pin to
+   * it. Link (and any non-file) findings never carry one — they have no
+   * bytes of their own to anchor.
+   */
+  contentHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
 });
 
 export const linkFindingSchema = z.object({
@@ -42,7 +50,7 @@ export const findingSchema = z.discriminatedUnion("type", [
 ]);
 
 export const scanResultSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   scannedAt: z.iso.datetime(),
   repoRoot: z.string(),
   counts: z.object({

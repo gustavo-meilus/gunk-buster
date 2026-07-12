@@ -8,11 +8,11 @@ Read-only credibility. `gunk scan` indexes the candidate universe (docs, doc-ref
 
 ## MVP 2 — Radar
 
-The flagship. `gunk radar` audits what agents actually read — AGENTS.md, CLAUDE.md, .cursorrules, copilot-instructions, and friends — for *semantic* gunk: commands that don't exist, package-manager drift, paths that are gone, claims contradicted by the repo, duplicated and conflicting instructions, context bloat. Introduces labels BAIT and MOLD. Read-only: it emits findings plus a patch plan, never an applied patch — mutation waits for MVP 3's safety machinery.
+The flagship. `gunk radar` audits what agents actually read — AGENTS.md, CLAUDE.md, .cursorrules, copilot-instructions, and friends — for *semantic* gunk: commands that don't exist, package-manager drift, paths that are gone, claims contradicted by the repo, duplicated and conflicting instructions, context bloat. Introduces labels BAIT and MOLD. Read-only: it emits findings plus a patch plan, never an applied patch — mutation waits for MVP 3's safety machinery. Full decision set: [docs/specs/mvp-2-radar.md](docs/specs/mvp-2-radar.md).
 
 ## MVP 3 — Trap
 
-The safety moat and the first mutation. `gunk trap` moves approved candidates to an external vault (`../.gunk-buster/traps/<repo>/<trap-id>/` — outside the repo, so agents cannot read them), writing tracked receipts that carry the evidence and a restore command. `gunk restore` restores byte-identical files; `gunk bust safe` batch-traps SAFE verdicts behind Chief approval; `gunk ask` walks ASK_CHIEF items interactively; `gunk radar --fix` applies MVP 2's patch plans. `gunk verify` closes every mutation: link check, agent-context-refs check, git status, and optional user-configured commands. Protected files are never trappable. No silent delete, ever.
+The safety moat and the first mutation. `gunk trap` moves approved candidates to an external vault (`../.gunk-buster/traps/<repo>/<trap-id>/` — outside the repo, so agents cannot read them), writing tracked receipts that carry the evidence and a restore command. `gunk restore` restores byte-identical files; `gunk bust safe` batch-traps SAFE verdicts behind Chief approval; `gunk ask` walks ASK_CHIEF items interactively; `gunk radar --fix` applies MVP 2's patch plans. `gunk verify` closes every mutation: link check, agent-context-refs check, git status, and optional user-configured commands. Protected files are never trappable. No silent delete, ever. Full decision set: [docs/specs/mvp-3-trap.md](docs/specs/mvp-3-trap.md).
 
 ## MVP 4 — Agent ecosystem
 
