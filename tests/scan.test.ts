@@ -1,11 +1,12 @@
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { GunkError } from "../src/errors.js";
+import { writeKeep } from "../src/keeps.js";
 import { loadScanResult, persistScanResult, scan } from "../src/scan.js";
 import { scanResultSchema, type ScanResult } from "../src/schema.js";
-import { fileFindings } from "./helpers/findings.js";
+import { NINETY_DAYS_AGO, fileFindings } from "./helpers/findings.js";
 import { createFixtureRepo, createTempDir, removeDir } from "./helpers/fixture.js";
 
 describe("scan(repoRoot, config) — engine seam", () => {
@@ -118,6 +119,85 @@ describe("scan(repoRoot, config) — contentHash, the MVP 3 staleness anchor (#1
     const before = fileFindings(result)[0]!;
     const after = fileFindings(again).find((f) => f.path === before.path)!;
     expect(after.contentHash).toBe(before.contentHash);
+  });
+});
+
+describe("scan(repoRoot, config) — keep decisions (docs/specs/mvp-3-trap.md)", () => {
+  let repo: string;
+
+  beforeEach(async () => {
+    // Backdated past the recency window so docs/old-plan.md lands PROPOSE
+    // (not capped at ASK_CHIEF) — a stable baseline verdict to override.
+    repo = await createFixtureRepo("orphan-docs", { commitDate: NINETY_DAYS_AGO });
+  });
+
+  afterEach(async () => {
+    await removeDir(repo);
+  });
+
+  it("a finding with no matching keep entry keeps its normal verdict and no keptBy", async () => {
+    const result = await scan(repo, defaultConfig());
+    const finding = fileFindings(result).find((f) => f.path === "docs/old-plan.md")!;
+    expect(finding.verdict).toBe("PROPOSE");
+    expect(finding).not.toHaveProperty("keptBy");
+  });
+
+  it("a matching keep entry overrides the verdict to KEEP with keptBy chief — never silently hidden", async () => {
+    const before = await scan(repo, defaultConfig());
+    const original = fileFindings(before).find((f) => f.path === "docs/old-plan.md")!;
+
+    await writeKeep(repo, {
+      path: "docs/old-plan.md",
+      contentHash: original.contentHash,
+      decidedAt: "2026-07-11T14:22:05.123Z",
+    });
+
+    const after = await scan(repo, defaultConfig());
+    const kept = fileFindings(after).find((f) => f.path === "docs/old-plan.md")!;
+    expect(kept.verdict).toBe("KEEP");
+    expect(kept.keptBy).toBe("chief");
+    // evidence and label are preserved — a KEEP row in the pile tells the truth
+    expect(kept.label).toBe(original.label);
+    expect(kept.evidence).toEqual(original.evidence);
+    expect(after.counts.byVerdict.KEEP).toBe(1);
+  });
+
+  it("a keep entry pinned to a stale hash never fires — the finding resurfaces under its normal verdict", async () => {
+    const before = await scan(repo, defaultConfig());
+    const original = fileFindings(before).find((f) => f.path === "docs/old-plan.md")!;
+
+    await writeKeep(repo, {
+      path: "docs/old-plan.md",
+      contentHash: `sha256:${"f".repeat(64)}`, // deliberately not original's hash
+      decidedAt: "2026-07-11T14:22:05.123Z",
+    });
+
+    const after = await scan(repo, defaultConfig());
+    const finding = fileFindings(after).find((f) => f.path === "docs/old-plan.md")!;
+    expect(finding.verdict).toBe("PROPOSE");
+    expect(finding).not.toHaveProperty("keptBy");
+  });
+
+  it("editing the file after a keep decision expires it — content changed, decision no longer applies", async () => {
+    const before = await scan(repo, defaultConfig());
+    const original = fileFindings(before).find((f) => f.path === "docs/old-plan.md")!;
+
+    await writeKeep(repo, {
+      path: "docs/old-plan.md",
+      contentHash: original.contentHash,
+      decidedAt: "2026-07-11T14:22:05.123Z",
+    });
+    // proves the override fires first
+    const kept = fileFindings(await scan(repo, defaultConfig())).find((f) => f.path === "docs/old-plan.md")!;
+    expect(kept.verdict).toBe("KEEP");
+
+    await writeFile(path.join(repo, "docs", "old-plan.md"), "edited after the keep decision\n");
+
+    const resurfaced = fileFindings(await scan(repo, defaultConfig())).find(
+      (f) => f.path === "docs/old-plan.md",
+    )!;
+    expect(resurfaced.verdict).not.toBe("KEEP");
+    expect(resurfaced).not.toHaveProperty("keptBy");
   });
 });
 

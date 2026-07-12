@@ -67,7 +67,7 @@ export async function bust(repoRoot: string, opts: BustOptions = {}): Promise<Bu
   const findings = findSafeFindings(scanResult);
 
   const nowFactory = opts.now ?? (() => new Date());
-  const batchId = buildBatchId(nowFactory());
+  const batchId = buildBatchId(nowFactory(), "bust");
 
   const trapped: TrapReceipt[] = [];
   const skipped: BustSkip[] = [];

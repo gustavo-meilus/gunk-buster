@@ -12,8 +12,10 @@ import { GunkError } from "./errors.js";
 import { buildFileIndex, hashIndexedFile, readIndexedFile, type FileEntry } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
+import { GUNK_BUSTER_GITIGNORE } from "./gunk-buster-dir.js";
+import { loadKeeps } from "./keeps.js";
 import { buildReferenceGraphs } from "./reference-graphs.js";
-import { scanResultSchema, type FileFinding, type ScanResult } from "./schema.js";
+import { scanResultSchema, type FileFinding, type KeepEntry, type ScanResult } from "./schema.js";
 
 /** Every detector the scan runs, in registration order. */
 const DETECTORS: readonly Detector[] = [
@@ -62,6 +64,28 @@ async function withContentHashes(
 }
 
 /**
+ * Consult the keep ledger after the verdict function has already run (spec
+ * "Keep decisions"): a finding whose path and current `contentHash` match a
+ * keep entry is still emitted — never silently hidden — with its verdict
+ * overridden to `KEEP` and `keptBy: "chief"`. A keep entry pinned to a
+ * different hash (the file changed since the Chief decided) is stale and
+ * changes nothing; the finding resurfaces under its normal verdict.
+ */
+function applyKeepDecisions(
+  findings: readonly FileFinding[],
+  keeps: readonly KeepEntry[],
+): FileFinding[] {
+  const keepByPath = new Map(keeps.map((keep) => [keep.path, keep]));
+  return findings.map((finding) => {
+    const keep = keepByPath.get(finding.path);
+    if (keep && keep.contentHash === finding.contentHash) {
+      return { ...finding, verdict: "KEEP", keptBy: "chief" };
+    }
+    return finding;
+  });
+}
+
+/**
  * The engine seam: run a read-only scan of the repo containing `repoRoot`
  * and return the ScanResult (exactly the scan.json document).
  *
@@ -89,13 +113,15 @@ export async function scan(
   const references = await buildReferenceGraphs(root, fileIndex, docGraph);
   const contents = await readDocContents(root, fileIndex);
 
-  const fileFindings = await withContentHashes(
+  const hashedFindings = await withContentHashes(
     root,
     classify(
       { fileIndex, gitIndex, docGraph, references, contents, config: effectiveConfig },
       DETECTORS,
     ),
   );
+  const keeps = await loadKeeps(root);
+  const fileFindings = applyKeepDecisions(hashedFindings, keeps);
   const linkFindings = findBrokenLinks(docGraph);
 
   return scanResultSchema.parse({
@@ -109,13 +135,6 @@ export async function scan(
 
 /** Where the persisted scan index lives, relative to the repo root. */
 const SCAN_JSON_RELATIVE_PATH = path.join(".gunk-buster", "scan.json");
-
-/**
- * The internal .gitignore content shared by scan and radar (#9) — one
- * constant so both persist functions write identical coverage regardless of
- * which tool runs first or second.
- */
-export const GUNK_BUSTER_GITIGNORE = "scan.json\nradar.json\nreports/\n";
 
 /**
  * Persist the scan index to `<repoRoot>/.gunk-buster/scan.json`. The

@@ -3,20 +3,26 @@ import { createInterface } from "node:readline/promises";
 import path from "node:path";
 import { Command } from "commander";
 import packageJson from "../package.json" with { type: "json" };
+import { findAskItems } from "./ask.js";
 import { bust, findSafeFindings } from "./bust.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import { GunkError, refuse } from "./errors.js";
 import { resolveRepoRoot } from "./git.js";
+import { writeKeep } from "./keeps.js";
 import { buildPileResult } from "./pile.js";
 import { buildFixPlan, persistRadarResult, radar, tryLoadRadarResult } from "./radar.js";
 import { writeReport } from "./report.js";
 import { loadScanResult, persistScanResult, scan } from "./scan.js";
 import type { RadarResult, ScanResult } from "./schema.js";
 import { restore, type RestoreRef } from "./restore.js";
-import { findTrappableFinding, trap } from "./trap.js";
+import { buildBatchId, findTrappableFinding, trap } from "./trap.js";
 import { verify } from "./verify.js";
 import {
   renderAskChiefConfirmation,
+  renderAskEmptyHuman,
+  renderAskItemPrompt,
+  renderAskKeptHuman,
+  renderAskSummaryHuman,
   renderBustConfirmation,
   renderBustEmptyHuman,
   renderBustHuman,
@@ -173,6 +179,26 @@ async function confirm(promptText: string): Promise<boolean> {
   }
 }
 
+/**
+ * Reads one raw answer, trimmed and lowercased, for `gunk ask`'s per-item
+ * [t/k/s/q] action — or `null` when stdin ended before answering (treated
+ * as an implicit quit). `lines` must be a readline interface's own async
+ * iterator (`rl[Symbol.asyncIterator]()`), not repeated `rl.question()`
+ * calls: over piped, non-TTY stdin, a chunk can carry more than one line at
+ * once, and `.question()` only ever captures the first — anything already
+ * buffered past it is lost the moment its one-shot listener detaches. The
+ * async-iterator protocol is what readline documents for exactly this case:
+ * it queues lines that arrive before anyone's asked for them.
+ */
+async function nextAskAction(
+  lines: AsyncIterator<string>,
+  promptText: string,
+): Promise<string | null> {
+  process.stderr.write(promptText);
+  const next = await lines.next();
+  return next.done ? null : next.value.trim().toLowerCase();
+}
+
 program
   .command("trap")
   .description(
@@ -292,6 +318,91 @@ program
     // Exit 0 unless the auto-run verify finds damage (ADR-0005) — same
     // convention as trap/restore.
     await runVerifyAndSetExit(root, config, options.json ?? false);
+  });
+
+program
+  .command("ask")
+  .description(
+    "Walk PROPOSE findings, then ASK_CHIEF, one at a time: [t]rap, [k]eep, [s]kip, [q]uit",
+  )
+  .option("--json", "not supported — ask is interactive by definition")
+  .action(async (options: { json?: boolean }) => {
+    const root = await resolveRepoRoot(process.cwd());
+    const config = await loadConfig(root);
+
+    if (options.json) {
+      refuse(
+        config.voice,
+        "Ask is interactive, Chief — no --json for this one.",
+        "ask is interactive — --json is not supported.",
+      );
+    }
+
+    const scanResult = await loadScanResult(root);
+    const items = findAskItems(scanResult);
+
+    if (items.length === 0) {
+      process.stdout.write(`${renderAskEmptyHuman(config.voice)}\n`);
+      return;
+    }
+
+    const now = () => new Date();
+    const batchId = buildBatchId(now(), "ask");
+    let trappedCount = 0;
+    let keptCount = 0;
+    let skippedCount = 0;
+
+    // One readline interface for the whole session, consumed as an async
+    // iterator — see `nextAskAction`'s doc comment for why.
+    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    const lines = rl[Symbol.asyncIterator]();
+    try {
+      for (const finding of items) {
+        const action = await nextAskAction(lines, renderAskItemPrompt(config.voice, finding));
+
+        if (action === null || action === "q") {
+          break;
+        } else if (action === "t") {
+          try {
+            const receipt = await trap(root, finding.path, {
+              config,
+              batchId,
+              now,
+              ...(finding.verdict === "ASK_CHIEF" ? { askChiefConfirmed: true } : {}),
+              onWarning: (warning) => process.stderr.write(`${warning}\n`),
+            });
+            trappedCount++;
+            process.stdout.write(`${renderTrapHuman(config.voice, receipt)}\n`);
+          } catch (error) {
+            const message = error instanceof GunkError ? error.message : String(error);
+            process.stderr.write(`${message}\n`);
+          }
+        } else if (action === "k") {
+          await writeKeep(root, {
+            path: finding.path,
+            contentHash: finding.contentHash,
+            decidedAt: now().toISOString(),
+          });
+          keptCount++;
+          process.stdout.write(`${renderAskKeptHuman(config.voice, finding.path)}\n`);
+        } else {
+          // s (or anything unrecognized): skip, records nothing (spec).
+          skippedCount++;
+        }
+      }
+    } finally {
+      rl.close();
+    }
+
+    process.stdout.write(
+      `${renderAskSummaryHuman(config.voice, { trapped: trappedCount, kept: keptCount, skipped: skippedCount })}\n`,
+    );
+
+    // Verify runs once after the session, only if anything was trapped
+    // (spec) — a session of pure keeps/skips mutated nothing to check.
+    if (trappedCount > 0) {
+      await runVerifyAndSetExit(root, config, false);
+    }
   });
 
 /** A trap-id starts with its filesystem-safe UTC timestamp — the one shape a repo path can't take. */

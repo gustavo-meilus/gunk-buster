@@ -105,6 +105,9 @@ Byte-identical recovery of a trapped file from its receipt.
 **Bust**:
 Batch-trap all SAFE-verdict findings behind Chief approval.
 
+**Ask**:
+Interactive walk of PROPOSE, then ASK_CHIEF findings — trap, keep, skip, or quit, one at a time.
+
 **Keep decision** _(Trap)_:
 A Chief ruling, pinned to a file's content, that a finding is not gunk. Expires when the content changes.
 _Avoid_: ignore, suppress, whitelist

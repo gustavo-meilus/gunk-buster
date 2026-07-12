@@ -345,6 +345,46 @@ export function renderBustHuman(voice: Voice, result: BustResult): string {
   return lines.join("\n");
 }
 
+export function renderAskEmptyHuman(voice: Voice): string {
+  return voice === "professional"
+    ? "No PROPOSE or ASK_CHIEF findings. Nothing to ask about."
+    : "Chief, nothing to ask about — no PROPOSE or ASK_CHIEF findings on the pile.";
+}
+
+/**
+ * One `gunk ask` item's description plus its action prompt, combined into
+ * one string (spec: "shows its verdict, label, and evidence") — the same
+ * shape as `renderTrapConfirmation`, ending without a newline since the
+ * answer is typed on the same line.
+ */
+export function renderAskItemPrompt(voice: Voice, finding: FileFinding): string {
+  const rationale = finding.evidence
+    .map((e) => `${e.rule} (${e.confidence}): ${e.rationale}`)
+    .join("; ");
+  const header =
+    voice === "professional"
+      ? `${finding.path} — ${finding.label} (${finding.verdict}) — ${rationale}`
+      : `Chief, ${finding.path} — ${finding.label} (${finding.verdict}) — ${rationale}.`;
+  return `${header}\n[t]rap, [k]eep, [s]kip, [q]uit? `;
+}
+
+/** After a [k]eep action: the ruling stands until the file's content changes. */
+export function renderAskKeptHuman(voice: Voice, path: string): string {
+  return voice === "professional"
+    ? `Kept: ${path} — pinned to its current content until it changes.`
+    : `Chief, ${path} stays — I'll leave it be until the content changes.`;
+}
+
+/** The `gunk ask` session's closing tally. */
+export function renderAskSummaryHuman(
+  voice: Voice,
+  counts: { trapped: number; kept: number; skipped: number },
+): string {
+  return voice === "professional"
+    ? `Ask session done: ${counts.trapped} trapped, ${counts.kept} kept, ${counts.skipped} skipped.`
+    : `Chief, that's the session: ${counts.trapped} trapped, ${counts.kept} kept, ${counts.skipped} skipped.`;
+}
+
 /**
  * `gunk radar --fix-plan` — a checklist of every suggestion-carrying claim
  * finding (`buildFixPlan` already filtered out the rest). No diffs, nothing
