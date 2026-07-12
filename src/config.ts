@@ -48,6 +48,14 @@ export const trapConfigSchema = z.strictObject({
   vaultRoot: z.string().default("../.gunk-buster"),
 });
 
+/**
+ * The `verify` config block (docs/specs/mvp-3-trap.md): user commands verify
+ * runs sequentially after its built-in checks — any non-zero exit is damage.
+ */
+export const verifyConfigSchema = z.strictObject({
+  commands: z.array(z.string()).default([]),
+});
+
 // strictObject: an unknown knob (e.g. a typo) is a tool error, never
 // silently dropped — same strictness as an invalid value.
 export const configSchema = z.strictObject({
@@ -63,6 +71,8 @@ export const configSchema = z.strictObject({
   radar: radarConfigSchema.default(() => radarConfigSchema.parse({})),
   /** Trap (MVP 3) configuration. */
   trap: trapConfigSchema.default(() => trapConfigSchema.parse({})),
+  /** Verify (MVP 3) configuration. */
+  verify: verifyConfigSchema.default(() => verifyConfigSchema.parse({})),
 });
 
 export type GunkConfig = z.infer<typeof configSchema>;

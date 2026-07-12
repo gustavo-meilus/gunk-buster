@@ -1,11 +1,16 @@
 import { execFile, execSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { appendFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { radarResultSchema, scanResultSchema, trapReceiptSchema } from "../src/schema.js";
+import {
+  radarResultSchema,
+  scanResultSchema,
+  trapReceiptSchema,
+  verifyResultSchema,
+} from "../src/schema.js";
 import { NINETY_DAYS_AGO } from "./helpers/findings.js";
 import { createFixtureRepo, createTempDir, removeDir } from "./helpers/fixture.js";
 
@@ -171,5 +176,55 @@ describe("gunk restore — CLI smoke test", () => {
     const run = await runGunk(repo, "restore");
     expect(run.exitCode).not.toBe(0);
     expect(run.stderr).toContain("exactly one target");
+  });
+});
+
+describe("gunk verify — CLI smoke test", () => {
+  let repo: string;
+  let vaultParent: string;
+
+  beforeAll(async () => {
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+    repo = await createFixtureRepo("orphan-docs", { commitDate: NINETY_DAYS_AGO });
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+    await removeDir(vaultParent);
+  });
+
+  it("--json prints a schema-valid VerifyResult, no persona strings, exit 0 when clean", async () => {
+    const run = await runGunk(repo, "verify", "--json");
+    expect(run.exitCode).toBe(0);
+
+    const result = verifyResultSchema.parse(JSON.parse(run.stdout));
+    expect(result.passed).toBe(true);
+    expect(run.stdout).not.toContain("Chief");
+  });
+
+  it("the demo: trap a still-linked file — auto-verify fails, exits non-zero, last line is the restore command", async () => {
+    // the inbound-link race: the reference lands after scan judged the file
+    await appendFile(path.join(repo, "docs", "guide.md"), "\nSee [the plan](old-plan.md).\n");
+
+    const trapRun = await runGunk(repo, "trap", "docs/old-plan.md", "--yes", "--json");
+    expect(trapRun.exitCode).not.toBe(0); // ADR-0005: the auto-run verify found damage
+    const receipt = trapReceiptSchema.parse(JSON.parse(trapRun.stdout)); // stdout stays one schema-valid document
+
+    // standalone verify agrees, and its human output ends with the exact undo
+    const verifyRun = await runGunk(repo, "verify");
+    expect(verifyRun.exitCode).not.toBe(0);
+    const lines = verifyRun.stdout.trim().split("\n");
+    expect(lines[lines.length - 1]).toBe(`gunk restore ${receipt.trapId}`);
+
+    // restore undoes the damage; its own auto-verify passes -> exit 0 again
+    const restoreRun = await runGunk(repo, "restore", receipt.trapId);
+    expect(restoreRun.exitCode).toBe(0);
+    expect((await runGunk(repo, "verify")).exitCode).toBe(0);
   });
 });

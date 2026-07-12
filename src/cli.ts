@@ -13,8 +13,10 @@ import { loadScanResult, persistScanResult, scan } from "./scan.js";
 import type { RadarResult, ScanResult } from "./schema.js";
 import { restore, type RestoreRef } from "./restore.js";
 import { findTrappableFinding, trap } from "./trap.js";
+import { verify } from "./verify.js";
 import {
   renderRestoreHuman,
+  renderVerifyHuman,
   renderFixPlanHuman,
   renderPileHuman,
   renderRadarHuman,
@@ -196,7 +198,9 @@ program
     } else {
       process.stdout.write(`${renderTrapHuman(config.voice, receipt)}\n`);
     }
-    // Exit 0: a successful trap is a successful mutation, not a finding (ADR-0004 is about findings; this is the tool doing what it was told).
+    // Exit 0 unless the auto-run verify finds damage (ADR-0005) — a
+    // successful trap itself is never a failure (ADR-0004 is about findings).
+    await verifyAfterMutation(root, config, options.json ?? false);
   });
 
 /** A trap-id starts with its filesystem-safe UTC timestamp — the one shape a repo path can't take. */
@@ -245,9 +249,45 @@ program
       } else {
         process.stdout.write(`${renderRestoreHuman(config.voice, result)}\n`);
       }
-      // Exit 0: a successful restore is the tool doing what it was told (ADR-0004).
+      // Exit 0 unless the auto-run verify finds damage (ADR-0005) — the
+      // restore itself, done as told, is never a failure (ADR-0004).
+      await verifyAfterMutation(root, config, options.json ?? false);
     },
   );
+
+/**
+ * The auto-run closing every mutation (spec: verify runs after trap and
+ * restore). Under `--json` the primary command owns stdout (one schema-valid
+ * document), so verify's human rendering goes to stderr — the same surface
+ * refusals use. A failed verify sets the non-zero exit either way (ADR-0005).
+ */
+async function verifyAfterMutation(root: string, config: GunkConfig, json: boolean): Promise<void> {
+  const result = await verify(root, { config });
+  const rendered = `${renderVerifyHuman(config.voice, result)}\n`;
+  (json ? process.stderr : process.stdout).write(rendered);
+  if (!result.passed) process.exitCode = 1;
+}
+
+program
+  .command("verify")
+  .description(
+    "Check that no mutation left damage behind: links, agent-context refs, git status, verify.commands",
+  )
+  .option("--json", "print the VerifyResult document to stdout")
+  .action(async (options: { json?: boolean }) => {
+    const root = await resolveRepoRoot(process.cwd());
+    const config = await loadConfig(root);
+    const result = await verify(root, { config });
+
+    if (options.json) {
+      printJson(result);
+    } else {
+      process.stdout.write(`${renderVerifyHuman(config.voice, result)}\n`);
+    }
+    // The sole findings-independent failure exit in the tool (ADR-0005):
+    // damage attributable to a mutation, never findings-as-failure (ADR-0004).
+    if (!result.passed) process.exitCode = 1;
+  });
 
 try {
   await program.parseAsync(process.argv);

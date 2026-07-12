@@ -4,7 +4,14 @@ import type { FixPlanResult } from "./radar.js";
 import type { PileFinding, PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
 import type { RestoreResult } from "./restore.js";
-import type { FileFinding, RadarResult, ScanResult, TrapReceipt, Verdict } from "./schema.js";
+import type {
+  FileFinding,
+  RadarResult,
+  ScanResult,
+  TrapReceipt,
+  Verdict,
+  VerifyResult,
+} from "./schema.js";
 
 /**
  * The Chief voice (CONTEXT.md "Chief"): compact, playful, concrete human
@@ -192,6 +199,70 @@ export function renderRestoreHuman(voice: Voice, result: RestoreResult): string 
         ? "Commit the flipped receipt(s) to make this stick."
         : "Commit the receipts when you get a sec, Chief.",
     );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Human summary of a verify run. On failure the very last line(s) are the
+ * exact `gunk restore` command(s) that undo the damage (spec/ADR-0005) —
+ * nothing may render after them. Pre-existing breakage and git status are
+ * informational context, kept to one line each.
+ */
+export function renderVerifyHuman(voice: Voice, result: VerifyResult): string {
+  const lines: string[] = [];
+
+  for (const d of result.damage) {
+    if (d.check === "commands") {
+      lines.push(
+        voice === "professional"
+          ? `Verify: command failed (exit ${d.exitCode}): ${d.command}`
+          : `Chief, a verify command went down (exit ${d.exitCode}): ${d.command}`,
+      );
+    } else {
+      const via = d.check === "links" ? "links to" : "still references";
+      lines.push(
+        voice === "professional"
+          ? `Verify: ${d.from} ${via} trapped ${d.target}`
+          : `Chief, ${d.from} ${via} ${d.target} — and that one's in the vault.`,
+      );
+    }
+  }
+
+  if (result.preexistingBrokenLinks.length > 0) {
+    const count = result.preexistingBrokenLinks.length;
+    lines.push(
+      voice === "professional"
+        ? `Note: ${count} pre-existing broken link${count === 1 ? "" : "s"} (not caused by this mutation).`
+        : `Heads-up, Chief: ${count} broken link${count === 1 ? "" : "s"} that predate${count === 1 ? "s" : ""} this — scan's problem, not mine.`,
+    );
+  }
+  if (result.gitStatus.length > 0) {
+    lines.push(
+      voice === "professional"
+        ? `Git status: ${result.gitStatus.length} pending change(s).`
+        : `Git's holding ${result.gitStatus.length} pending change(s), Chief.`,
+    );
+  }
+  for (const run of result.commands) {
+    if (run.exitCode === 0) {
+      lines.push(voice === "professional" ? `Command ok: ${run.command}` : `Ran clean: ${run.command}`);
+    }
+  }
+
+  if (result.passed) {
+    lines.push(voice === "professional" ? "Verify passed." : "Verify's clean, Chief — nothing broke.");
+    return lines.join("\n");
+  }
+
+  // Command-only damage has no restore command — trapping isn't what broke it.
+  if (result.restoreCommands.length === 0) {
+    lines.push(voice === "professional" ? "Verify FAILED." : "Verify FAILED, Chief.");
+  } else {
+    lines.push(
+      voice === "professional" ? "Verify FAILED. To undo:" : "Verify FAILED, Chief. The way back:",
+    );
+    lines.push(...result.restoreCommands);
   }
   return lines.join("\n");
 }

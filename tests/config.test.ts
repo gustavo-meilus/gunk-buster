@@ -37,6 +37,9 @@ describe("loadConfig(repoRoot)", () => {
       trap: {
         vaultRoot: "../.gunk-buster",
       },
+      verify: {
+        commands: [],
+      },
     });
     expect(existsSync(path.join(dir, CONFIG_FILE_NAME))).toBe(false);
   });
@@ -64,6 +67,9 @@ describe("loadConfig(repoRoot)", () => {
       },
       trap: {
         vaultRoot: "../.gunk-buster",
+      },
+      verify: {
+        commands: [],
       },
     });
   });
