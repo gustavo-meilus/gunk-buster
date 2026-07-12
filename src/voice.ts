@@ -361,10 +361,19 @@ export function renderAskItemPrompt(voice: Voice, finding: FileFinding): string 
   const rationale = finding.evidence
     .map((e) => `${e.rule} (${e.confidence}): ${e.rationale}`)
     .join("; ");
+  // ASK_CHIEF's moat (spec "Trap" verdict ladder) states the protection that
+  // fired even inside ask's walk — trapping it is still one of the four
+  // actions below, but the Chief sees why before choosing.
+  const protectionNote =
+    finding.verdict === "ASK_CHIEF"
+      ? voice === "professional"
+        ? ` Protection: ${protectionSummary(finding)}.`
+        : ` Protection fired: ${protectionSummary(finding)}.`
+      : "";
   const header =
     voice === "professional"
-      ? `${finding.path} — ${finding.label} (${finding.verdict}) — ${rationale}`
-      : `Chief, ${finding.path} — ${finding.label} (${finding.verdict}) — ${rationale}.`;
+      ? `${finding.path} — ${finding.label} (${finding.verdict}) — ${rationale}.${protectionNote}`
+      : `Chief, ${finding.path} — ${finding.label} (${finding.verdict}) — ${rationale}.${protectionNote}`;
   return `${header}\n[t]rap, [k]eep, [s]kip, [q]uit? `;
 }
 

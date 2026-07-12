@@ -391,6 +391,26 @@ describe("gunk ask — CLI smoke test", () => {
     expect(existsSync(path.join(repo, "assets", "unused-diagram.png"))).toBe(true);
   });
 
+  it("an ASK_CHIEF item's prompt states the protection that fired, and [t]rap traps it", async () => {
+    // NOT backdated: the recently-modified protection caps both findings at
+    // ASK_CHIEF — ask's moat must still name the protection per item (spec
+    // "Trap" verdict ladder), not just walk it like any other action.
+    repo = await createFixtureRepo("orphan-docs");
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+
+    const run = await runGunkInteractive(repo, ["ask"], ["t", "t"]);
+    expect(run.exitCode).toBe(0);
+    expect(run.stderr).toContain("recently-modified");
+    expect(run.stdout).toContain("2 trapped, 0 kept, 0 skipped");
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(false);
+    expect(existsSync(path.join(repo, "assets", "unused-diagram.png"))).toBe(false);
+  });
+
   it("with nothing PROPOSE or ASK_CHIEF on the pile, prints a human message and exits 0 without prompting", async () => {
     repo = await createFixtureRepo("clean-repo");
     vaultParent = await createTempDir();
