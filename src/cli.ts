@@ -7,6 +7,7 @@ import { findAskItems } from "./ask.js";
 import { bust, findSafeFindings } from "./bust.js";
 import { loadConfig, type GunkConfig } from "./config.js";
 import { GunkError, refuse } from "./errors.js";
+import { fix } from "./fix.js";
 import { resolveRepoRoot } from "./git.js";
 import { writeKeep } from "./keeps.js";
 import { buildPileResult } from "./pile.js";
@@ -28,6 +29,9 @@ import {
   renderBustHuman,
   renderRestoreHuman,
   renderVerifyHuman,
+  renderFixConfirmation,
+  renderFixEmptyHuman,
+  renderFixHuman,
   renderFixPlanHuman,
   renderPileHuman,
   renderRadarHuman,
@@ -103,25 +107,80 @@ program
     "--fix-plan",
     "render the aggregated per-finding suggestions as a checklist, instead of the findings themselves",
   )
-  .action(async (options: { json?: boolean; fixPlan?: boolean }) => {
-    const result = await radar(process.cwd());
-    const radarPath = await persistRadarResult(result);
-    const config = await loadConfig(result.repoRoot);
+  .option(
+    "--fix",
+    "apply every suggestion-carrying claim finding behind one Chief confirmation, then run verify",
+  )
+  .option("--yes", "pre-approve the single --fix batch confirmation")
+  .option("--force", "apply a --fix edit to a dirty or untracked target anyway")
+  .action(
+    async (options: {
+      json?: boolean;
+      fixPlan?: boolean;
+      fix?: boolean;
+      yes?: boolean;
+      force?: boolean;
+    }) => {
+      const result = await radar(process.cwd());
+      const radarPath = await persistRadarResult(result);
+      const config = await loadConfig(result.repoRoot);
 
-    if (options.fixPlan) {
-      const fixPlan = buildFixPlan(result);
-      if (options.json) {
-        printJson(fixPlan);
+      if (options.fix) {
+        const plan = buildFixPlan(result);
+        if (plan.items.length === 0) {
+          process.stdout.write(`${renderFixEmptyHuman(config.voice)}\n`);
+          return;
+        }
+
+        let confirmed = options.yes ?? false;
+        if (!confirmed) {
+          // No TTY under --json — the single confirmation can't happen, so
+          // --yes is the only way in (spec: "radar --fix refuses to act
+          // without --yes" under --json).
+          if (options.json) {
+            refuse(
+              config.voice,
+              "Fix needs your yes, Chief — pass --yes under --json.",
+              "radar --fix requires --yes under --json.",
+            );
+          }
+          confirmed = await confirm(renderFixConfirmation(config.voice, plan.items));
+          if (!confirmed) {
+            process.stdout.write(`${renderTrapDeclinedHuman(config.voice)}\n`);
+            return;
+          }
+        }
+
+        const fixResult = await fix(result.repoRoot, {
+          config,
+          confirmed: true,
+          force: options.force ?? false,
+          onWarning: (warning) => process.stderr.write(`${warning}\n`),
+        });
+
+        if (options.json) {
+          printJson(fixResult);
+        } else {
+          process.stdout.write(`${renderFixHuman(config.voice, fixResult)}\n`);
+        }
+        // Exit 0 unless the auto-run verify finds damage (ADR-0005) — same
+        // convention as trap/bust/restore.
+        await runVerifyAndSetExit(result.repoRoot, config, options.json ?? false);
+      } else if (options.fixPlan) {
+        const fixPlan = buildFixPlan(result);
+        if (options.json) {
+          printJson(fixPlan);
+        } else {
+          process.stdout.write(`${renderFixPlanHuman(config.voice, fixPlan)}\n`);
+        }
+      } else if (options.json) {
+        printJson(result);
       } else {
-        process.stdout.write(`${renderFixPlanHuman(config.voice, fixPlan)}\n`);
+        process.stdout.write(`${renderRadarHuman(config.voice, result, radarPath)}\n`);
       }
-    } else if (options.json) {
-      printJson(result);
-    } else {
-      process.stdout.write(`${renderRadarHuman(config.voice, result, radarPath)}\n`);
-    }
-    // Exit 0 on any successful radar run, findings or not (ADR-0004).
-  });
+      // Exit 0 on any successful radar run, findings or not (ADR-0004).
+    },
+  );
 
 program
   .command("pile")

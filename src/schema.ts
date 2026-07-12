@@ -241,6 +241,40 @@ export const bustResultSchema = z.object({
 export type BustSkip = z.infer<typeof bustSkipSchema>;
 export type BustResult = z.infer<typeof bustResultSchema>;
 
+/** One suggestion-carrying claim finding `gunk radar --fix` rewrote in place. */
+export const fixAppliedSchema = z.object({
+  path: z.string(),
+  line: z.int().positive(),
+  check: z.string(),
+  label: z.enum(CLAIM_LABELS),
+  replace: z.string(),
+  with: z.string(),
+});
+
+/** One fix-plan item `gunk radar --fix` declined to apply — the staleness or git guard fired. */
+export const fixSkipSchema = z.object({
+  path: z.string(),
+  line: z.int().positive(),
+  reason: z.string(),
+});
+
+/**
+ * The fix contract, schemaVersion 1 (docs/specs/mvp-3-trap.md "Radar --fix"):
+ * the outcome of one `gunk radar --fix` run — every suggestion-carrying claim
+ * finding either applied or skipped with the guard's reason. No receipts:
+ * git is the only undo for an edit (spec). Verify is not embedded here — it
+ * runs once, separately, after the batch, same as bust.
+ */
+export const fixResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  applied: z.array(fixAppliedSchema),
+  skipped: z.array(fixSkipSchema),
+});
+
+export type FixApplied = z.infer<typeof fixAppliedSchema>;
+export type FixSkip = z.infer<typeof fixSkipSchema>;
+export type FixResult = z.infer<typeof fixResultSchema>;
+
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 export type TrapReceipt = z.infer<typeof trapReceiptSchema>;
 
