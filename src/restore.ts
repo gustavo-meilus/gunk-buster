@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig, type GunkConfig, type Voice } from "./config.js";
-import { GunkError } from "./errors.js";
+import { refuse } from "./errors.js";
 import { hashIndexedFile } from "./file-index.js";
 import { resolveRepoRoot } from "./git.js";
 import { trapReceiptSchema, type TrapReceipt } from "./schema.js";
@@ -46,11 +46,6 @@ export interface RestoreOptions {
   force?: boolean;
   /** Clock injection for deterministic tests. */
   now?: () => Date;
-}
-
-/** Throw a GunkError, voiced per `config.voice` — the one place restore's refusal copy lives. */
-function refuse(voice: Voice, chief: string, professional: string): never {
-  throw new GunkError(voice === "professional" ? professional : chief);
 }
 
 function receiptsDir(repoRoot: string): string {
