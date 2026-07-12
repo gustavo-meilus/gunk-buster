@@ -11,8 +11,10 @@ import { buildFixPlan, persistRadarResult, radar, tryLoadRadarResult } from "./r
 import { writeReport } from "./report.js";
 import { loadScanResult, persistScanResult, scan } from "./scan.js";
 import type { RadarResult, ScanResult } from "./schema.js";
+import { restore, type RestoreRef } from "./restore.js";
 import { findTrappableFinding, trap } from "./trap.js";
 import {
+  renderRestoreHuman,
   renderFixPlanHuman,
   renderPileHuman,
   renderRadarHuman,
@@ -196,6 +198,56 @@ program
     }
     // Exit 0: a successful trap is a successful mutation, not a finding (ADR-0004 is about findings; this is the tool doing what it was told).
   });
+
+/** A trap-id starts with its filesystem-safe UTC timestamp — the one shape a repo path can't take. */
+const TRAP_ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/;
+
+program
+  .command("restore")
+  .description(
+    "Restore a trapped file byte-identically from its receipt (the vault keeps its copy)",
+  )
+  .argument("[ref]", "trap-id, or path (relative to cwd, or absolute) of the trapped file")
+  .option("--batch <batchId>", "restore every trapped file from one bust/ask run")
+  .option("--all", "restore everything currently trapped (the panic button)")
+  .option("--force", "overwrite an occupied original path whose content differs")
+  .option("--json", "print the RestoreResult document to stdout")
+  .action(
+    async (
+      refArg: string | undefined,
+      options: { batch?: string; all?: boolean; force?: boolean; json?: boolean },
+    ) => {
+      const modes = [refArg !== undefined, options.batch !== undefined, options.all ?? false];
+      if (modes.filter(Boolean).length !== 1) {
+        throw new GunkError(
+          'restore takes exactly one target: a trap-id or path, "--batch <batchId>", or "--all"',
+        );
+      }
+
+      const root = await resolveRepoRoot(process.cwd());
+      const config = await loadConfig(root);
+
+      let ref: RestoreRef;
+      if (options.all) {
+        ref = { all: true };
+      } else if (options.batch !== undefined) {
+        ref = { batchId: options.batch };
+      } else if (TRAP_ID_PATTERN.test(refArg as string)) {
+        ref = { trapId: refArg as string };
+      } else {
+        ref = { path: toFindingPath(root, process.cwd(), refArg as string) };
+      }
+
+      const result = await restore(root, ref, { config, force: options.force ?? false });
+
+      if (options.json) {
+        printJson(result);
+      } else {
+        process.stdout.write(`${renderRestoreHuman(config.voice, result)}\n`);
+      }
+      // Exit 0: a successful restore is the tool doing what it was told (ADR-0004).
+    },
+  );
 
 try {
   await program.parseAsync(process.argv);

@@ -1,7 +1,7 @@
 import { copyFile, mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig, type GunkConfig, type Voice } from "./config.js";
-import { GunkError } from "./errors.js";
+import { refuse } from "./errors.js";
 import { hashIndexedFile } from "./file-index.js";
 import { resolveRepoRoot } from "./git.js";
 import { GUNK_BUSTER_GITIGNORE, loadScanResult } from "./scan.js";
@@ -19,11 +19,6 @@ import { trapReceiptSchema, type FileFinding, type ScanResult, type TrapReceipt 
 
 /** Verdicts trap() will act on in this walking skeleton. */
 const TRAPPABLE_VERDICTS = new Set<FileFinding["verdict"]>(["SAFE", "PROPOSE"]);
-
-/** Throw a GunkError, voiced per `config.voice` — the one place trap's refusal copy lives. */
-function refuse(voice: Voice, chief: string, professional: string): never {
-  throw new GunkError(voice === "professional" ? professional : chief);
-}
 
 /**
  * Find the file finding trap should act on, or refuse. Shared by the engine
