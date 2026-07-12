@@ -3,6 +3,7 @@ import type { Voice } from "./config.js";
 import type { FixPlanResult } from "./radar.js";
 import type { PileFinding, PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
+import type { RestoreResult } from "./restore.js";
 import type { FileFinding, RadarResult, ScanResult, TrapReceipt, Verdict } from "./schema.js";
 
 /**
@@ -154,6 +155,45 @@ export function renderTrapHuman(voice: Voice, receipt: TrapReceipt): string {
         `Receipt stashed at ${receiptRel}.`,
         "Commit it when you get a sec, Chief.",
       ].join("\n");
+}
+
+/**
+ * Human summary after a restore: what came back, what was skipped (with the
+ * remedy), what was already restored — ending with the commit nudge whenever
+ * a receipt was flipped (spec: git is the Chief's job).
+ */
+export function renderRestoreHuman(voice: Voice, result: RestoreResult): string {
+  const lines: string[] = [];
+
+  for (const receipt of result.restored) {
+    lines.push(
+      voice === "professional"
+        ? `Restored: ${receipt.originalPath} (byte-identical, hash-verified)`
+        : `Chief, ${receipt.originalPath} is back — byte-identical, hash checked on both ends.`,
+    );
+  }
+  for (const skip of result.skipped) {
+    lines.push(
+      voice === "professional"
+        ? `Skipped ${skip.originalPath} (${skip.trapId}): ${skip.reason}`
+        : `Left ${skip.originalPath} in the vault, Chief — ${skip.reason} (${skip.trapId}).`,
+    );
+  }
+  for (const trapId of result.alreadyRestored) {
+    lines.push(
+      voice === "professional"
+        ? `Already restored: ${trapId} — nothing to do.`
+        : `${trapId} already walked out of the vault, Chief — nothing to do.`,
+    );
+  }
+  if (result.restored.length > 0) {
+    lines.push(
+      voice === "professional"
+        ? "Commit the flipped receipt(s) to make this stick."
+        : "Commit the receipts when you get a sec, Chief.",
+    );
+  }
+  return lines.join("\n");
 }
 
 /**
