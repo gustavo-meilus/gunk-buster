@@ -10,7 +10,7 @@ import {
   type ScanResult,
   type TrapReceipt,
 } from "./schema.js";
-import { buildTrapId, trap } from "./trap.js";
+import { buildBatchId, trap } from "./trap.js";
 
 /**
  * `gunk bust safe` (docs/specs/mvp-3-trap.md "Bust"): batch cleanup behind
@@ -67,7 +67,7 @@ export async function bust(repoRoot: string, opts: BustOptions = {}): Promise<Bu
   const findings = findSafeFindings(scanResult);
 
   const nowFactory = opts.now ?? (() => new Date());
-  const batchId = buildTrapId("bust", nowFactory());
+  const batchId = buildBatchId(nowFactory());
 
   const trapped: TrapReceipt[] = [];
   const skipped: BustSkip[] = [];

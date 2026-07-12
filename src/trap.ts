@@ -141,6 +141,11 @@ export function buildTrapId(relPath: string, now: Date): string {
   return `${trapTimestamp(now)}-${slugifyPath(relPath)}`;
 }
 
+/** A bust run's shared batch id (spec example: `2026-07-11T14-22-05Z-bust`) — the same sortable timestamp shape as a trap-id, not a slugged path. */
+export function buildBatchId(now: Date): string {
+  return `${trapTimestamp(now)}-bust`;
+}
+
 /** Move `from` to `to`, falling back to copy+unlink across devices (e.g. vault on another drive). */
 async function moveFile(from: string, to: string): Promise<void> {
   try {
