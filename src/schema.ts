@@ -137,6 +137,66 @@ export const trapReceiptSchema = z.object({
   restoredAt: z.iso.datetime().optional(),
 });
 
+/**
+ * One piece of damage attributable to a mutation (docs/specs/mvp-3-trap.md
+ * "Verify"): a remaining reference — markdown link or agent-context mention —
+ * to a currently trapped path, or a user-configured verify command exiting
+ * non-zero. Reference damage carries the exact restore command that undoes it.
+ */
+export const verifyDamageSchema = z.discriminatedUnion("check", [
+  z.object({
+    check: z.literal("links"),
+    from: z.string(),
+    target: z.string(),
+    trapId: z.string(),
+    restoreCommand: z.string(),
+  }),
+  z.object({
+    check: z.literal("agent-context-refs"),
+    from: z.string(),
+    target: z.string(),
+    trapId: z.string(),
+    restoreCommand: z.string(),
+  }),
+  z.object({
+    check: z.literal("commands"),
+    command: z.string(),
+    exitCode: z.int(),
+  }),
+]);
+
+/** One `verify.commands` entry's run: always captured, damage only when `exitCode` is non-zero. */
+export const verifyCommandRunSchema = z.object({
+  command: z.string(),
+  exitCode: z.int(),
+  output: z.string(),
+});
+
+/**
+ * The verify contract, schemaVersion 1: the answer to "did this mutation
+ * break anything?" — never "is the repo perfect?" (that's scan's question).
+ * `passed: false` (= non-empty `damage`) is the sole non-zero exit surface in
+ * the whole tool (ADR-0005); everything else here is informational context.
+ */
+export const verifyResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  verifiedAt: z.iso.datetime(),
+  repoRoot: z.string(),
+  passed: z.boolean(),
+  damage: z.array(verifyDamageSchema),
+  /** Broken links whose target is not a trapped path — pre-existing breakage, never failure. */
+  preexistingBrokenLinks: z.array(linkFindingSchema),
+  /** `git status --porcelain` lines, informational (pending deletions, untracked receipts). */
+  gitStatus: z.array(z.string()),
+  commands: z.array(verifyCommandRunSchema),
+  /** The exact `gunk restore` command(s) that undo the reference damage, deduped, in damage order. */
+  restoreCommands: z.array(z.string()),
+});
+
+export type VerifyDamage = z.infer<typeof verifyDamageSchema>;
+export type VerifyCommandRun = z.infer<typeof verifyCommandRunSchema>;
+export type VerifyResult = z.infer<typeof verifyResultSchema>;
+
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 export type TrapReceipt = z.infer<typeof trapReceiptSchema>;
 
