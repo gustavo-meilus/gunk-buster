@@ -38,6 +38,16 @@ export const radarConfigSchema = z.strictObject({
   exclude: z.array(z.string()).default([]),
 });
 
+/**
+ * The `trap` config block (docs/specs/mvp-3-trap.md): the one knob trap
+ * owns. `vaultRoot` is resolved relative to the repo root; the default puts
+ * the vault just outside it, a sibling disambiguated by the repo's own
+ * directory name.
+ */
+export const trapConfigSchema = z.strictObject({
+  vaultRoot: z.string().default("../.gunk-buster"),
+});
+
 // strictObject: an unknown knob (e.g. a typo) is a tool error, never
 // silently dropped — same strictness as an invalid value.
 export const configSchema = z.strictObject({
@@ -51,6 +61,8 @@ export const configSchema = z.strictObject({
   protectedPaths: z.array(z.string()).default([]),
   /** Radar (MVP 2) check configuration. */
   radar: radarConfigSchema.default(() => radarConfigSchema.parse({})),
+  /** Trap (MVP 3) configuration. */
+  trap: trapConfigSchema.default(() => trapConfigSchema.parse({})),
 });
 
 export type GunkConfig = z.infer<typeof configSchema>;

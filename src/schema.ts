@@ -107,6 +107,39 @@ export const radarResultSchema = z.object({
   findings: z.array(claimFindingSchema),
 });
 
+/** A trap receipt's lifecycle (docs/specs/mvp-3-trap.md): trapped, then restored. Never any other value. */
+export const RECEIPT_STATUSES = ["trapped", "restored"] as const;
+
+/**
+ * The receipt contract, schemaVersion 1 (docs/specs/mvp-3-trap.md): the
+ * durable, git-tracked audit record of one trap. Written twice byte-for-byte
+ * — once at `.gunk-buster/receipts/<trapId>.json` (authoritative, tracked)
+ * and once alongside the vaulted file (a convenience copy). `evidence` and
+ * `contentHash` are carried straight over from the file finding that earned
+ * the trap, so the receipt alone (no scan.json needed) proves why a file was
+ * trapped and that its bytes are unchanged.
+ */
+export const trapReceiptSchema = z.object({
+  schemaVersion: z.literal(1),
+  trapId: z.string(),
+  /** Shared by every receipt from one bust/ask run; a standalone `gunk trap` is its own batch of one. */
+  batchId: z.string(),
+  status: z.enum(RECEIPT_STATUSES),
+  originalPath: z.string(),
+  /** Repo-relative (forward-slash) path from the repo root to the vaulted copy, e.g. "../.gunk-buster/traps/...". */
+  vaultPath: z.string(),
+  label: z.enum(LABELS),
+  verdict: z.enum(VERDICTS),
+  evidence: z.array(evidenceSchema),
+  contentHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  trappedAt: z.iso.datetime(),
+  restoreCommand: z.string(),
+  restoredAt: z.iso.datetime().optional(),
+});
+
+export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
+export type TrapReceipt = z.infer<typeof trapReceiptSchema>;
+
 export type Confidence = (typeof CONFIDENCES)[number];
 export type Verdict = (typeof VERDICTS)[number];
 export type Label = (typeof LABELS)[number];

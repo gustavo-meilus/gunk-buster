@@ -34,6 +34,9 @@ describe("loadConfig(repoRoot)", () => {
         bloatWordBudget: 2500,
         exclude: [],
       },
+      trap: {
+        vaultRoot: "../.gunk-buster",
+      },
     });
     expect(existsSync(path.join(dir, CONFIG_FILE_NAME))).toBe(false);
   });
@@ -58,6 +61,9 @@ describe("loadConfig(repoRoot)", () => {
         },
         bloatWordBudget: 2500,
         exclude: [],
+      },
+      trap: {
+        vaultRoot: "../.gunk-buster",
       },
     });
   });
@@ -91,6 +97,23 @@ describe("loadConfig(repoRoot)", () => {
     expect(config.radar.exclude).toEqual(["tests/fixtures/**", "reference/**"]);
     expect(config.radar.checks.deadPaths).toBe(true);
     expect(config.radar.bloatWordBudget).toBe(2500);
+  });
+
+  it("reads a partial trap block and merges vaultRoot over defaults", async () => {
+    await writeFile(
+      path.join(dir, CONFIG_FILE_NAME),
+      JSON.stringify({ trap: { vaultRoot: "/tmp/my-vault" } }),
+    );
+    const config = await loadConfig(dir);
+    expect(config.trap).toEqual({ vaultRoot: "/tmp/my-vault" });
+  });
+
+  it("rejects an unknown key inside the trap block as a tool error", async () => {
+    await writeFile(
+      path.join(dir, CONFIG_FILE_NAME),
+      JSON.stringify({ trap: { vault: "/tmp/my-vault" } }), // typo: should be vaultRoot
+    );
+    await expect(loadConfig(dir)).rejects.toBeInstanceOf(GunkError);
   });
 
   it("rejects an unknown key inside the radar block as a tool error", async () => {

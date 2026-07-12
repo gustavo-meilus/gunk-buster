@@ -36,4 +36,6 @@ export { writeReport, renderReportMarkdown, reportResultSchema } from "./report.
 export type { ReportResult } from "./report.js";
 export { radar, persistRadarResult, loadRadarResult, labelFor, summarizeRadarCounts } from "./radar.js";
 export type { AuditFile, RadarCheck, RadarContext } from "./radar.js";
+export { trap, findTrappableFinding, resolveVaultRoot, buildTrapId } from "./trap.js";
+export type { TrapOptions } from "./trap.js";
 export * from "./schema.js";

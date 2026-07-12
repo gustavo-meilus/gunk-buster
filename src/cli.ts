@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { createInterface } from "node:readline/promises";
+import path from "node:path";
 import { Command } from "commander";
 import packageJson from "../package.json" with { type: "json" };
 import { loadConfig, type GunkConfig } from "./config.js";
@@ -9,12 +11,16 @@ import { buildFixPlan, persistRadarResult, radar, tryLoadRadarResult } from "./r
 import { writeReport } from "./report.js";
 import { loadScanResult, persistScanResult, scan } from "./scan.js";
 import type { RadarResult, ScanResult } from "./schema.js";
+import { findTrappableFinding, trap } from "./trap.js";
 import {
   renderFixPlanHuman,
   renderPileHuman,
   renderRadarHuman,
   renderReportHuman,
   renderScanHuman,
+  renderTrapConfirmation,
+  renderTrapDeclinedHuman,
+  renderTrapHuman,
 } from "./voice.js";
 
 /**
@@ -134,6 +140,61 @@ program
       process.stdout.write(`${renderReportHuman(config.voice, report)}\n`);
     }
     // Exit 0 regardless of findings — report only ever renders, never judges.
+  });
+
+/**
+ * Turn a user-supplied path (relative to cwd, possibly with backslashes on
+ * Windows, possibly absolute) into the repo-relative, forward-slash shape
+ * scan.json's finding paths use — the only place that translation happens,
+ * so the engine seam (trap.ts) can assume it's already done.
+ */
+function toFindingPath(root: string, cwd: string, input: string): string {
+  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input);
+  return path.relative(root, absolute).split(path.sep).join("/");
+}
+
+/** y/yes (case-insensitive) confirms; anything else (including Enter) declines. Prompts on stderr so `--json` stdout stays clean even without `--yes`. */
+async function confirm(promptText: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = await rl.question(promptText);
+    return /^y(es)?$/i.test(answer.trim());
+  } finally {
+    rl.close();
+  }
+}
+
+program
+  .command("trap")
+  .description(
+    "Move a SAFE- or PROPOSE-verdict file finding to the vault, and write a git-tracked receipt",
+  )
+  .argument("<path>", "path (relative to cwd, or absolute) of the file finding to trap")
+  .option("--yes", "skip the confirmation prompt")
+  .option("--json", "print the Receipt document to stdout")
+  .action(async (pathArg: string, options: { yes?: boolean; json?: boolean }) => {
+    const root = await resolveRepoRoot(process.cwd());
+    const config = await loadConfig(root);
+    const scanResult = await loadScanResult(root);
+    const relPath = toFindingPath(root, process.cwd(), pathArg);
+    const finding = findTrappableFinding(scanResult, relPath, config.voice);
+
+    if (!options.yes) {
+      const proceed = await confirm(renderTrapConfirmation(config.voice, finding));
+      if (!proceed) {
+        process.stdout.write(`${renderTrapDeclinedHuman(config.voice)}\n`);
+        return;
+      }
+    }
+
+    const receipt = await trap(root, relPath, { config });
+
+    if (options.json) {
+      printJson(receipt);
+    } else {
+      process.stdout.write(`${renderTrapHuman(config.voice, receipt)}\n`);
+    }
+    // Exit 0: a successful trap is a successful mutation, not a finding (ADR-0004 is about findings; this is the tool doing what it was told).
   });
 
 try {
