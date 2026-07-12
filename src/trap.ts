@@ -71,6 +71,19 @@ export function findTrappableFinding(
 }
 
 /**
+ * The one-line `git status --porcelain` read every mutation's git guard
+ * branches on (trap's `guardGitState` below, and fix's dirty/untracked
+ * skip) — `""` clean, `"??…"` untracked, anything else a dirty tracked
+ * file. Shared so the two guards, which interpret the same three states
+ * differently, never drift on how the read itself is made.
+ */
+export async function gitStatusFor(root: string, relPath: string): Promise<string> {
+  return (
+    await runGit(root, ["status", "--porcelain", "--untracked-files=all", "--", relPath])
+  ).trim();
+}
+
+/**
  * The git guard (spec "Git semantics"): a status *read*, never a mutation.
  * A tracked file with uncommitted changes refuses without `force` — trapping
  * it would make the vault the only holder of unversioned bytes. An untracked
@@ -83,9 +96,7 @@ async function guardGitState(
   force: boolean,
   onWarning: ((warning: string) => void) | undefined,
 ): Promise<void> {
-  const status = (
-    await runGit(root, ["status", "--porcelain", "--untracked-files=all", "--", relPath])
-  ).trim();
+  const status = await gitStatusFor(root, relPath);
 
   if (status === "") return; // tracked and clean — HEAD holds these bytes
 

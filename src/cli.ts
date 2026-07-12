@@ -11,7 +11,7 @@ import { fix } from "./fix.js";
 import { resolveRepoRoot } from "./git.js";
 import { writeKeep } from "./keeps.js";
 import { buildPileResult } from "./pile.js";
-import { buildFixPlan, persistRadarResult, radar, tryLoadRadarResult } from "./radar.js";
+import { buildFixPlan, loadRadarResult, persistRadarResult, radar, tryLoadRadarResult } from "./radar.js";
 import { writeReport } from "./report.js";
 import { loadScanResult, persistScanResult, scan } from "./scan.js";
 import type { RadarResult, ScanResult } from "./schema.js";
@@ -121,12 +121,17 @@ program
       yes?: boolean;
       force?: boolean;
     }) => {
-      const result = await radar(process.cwd());
-      const radarPath = await persistRadarResult(result);
-      const config = await loadConfig(result.repoRoot);
-
       if (options.fix) {
-        const plan = buildFixPlan(result);
+        // --fix's input contract mirrors trap's (spec: "requires a
+        // persisted radar.json — same principle as trap's input contract"):
+        // it reads back a PRIOR "gunk radar" run rather than recomputing one
+        // itself, so "no radar, no fix" is a real refusal, and the
+        // staleness guard has something genuinely stale to catch.
+        const root = await resolveRepoRoot(process.cwd());
+        const config = await loadConfig(root);
+        const radarResult = await loadRadarResult(root);
+        const plan = buildFixPlan(radarResult);
+
         if (plan.items.length === 0) {
           process.stdout.write(`${renderFixEmptyHuman(config.voice)}\n`);
           return;
@@ -151,7 +156,7 @@ program
           }
         }
 
-        const fixResult = await fix(result.repoRoot, {
+        const fixResult = await fix(root, {
           config,
           confirmed: true,
           force: options.force ?? false,
@@ -165,8 +170,15 @@ program
         }
         // Exit 0 unless the auto-run verify finds damage (ADR-0005) — same
         // convention as trap/bust/restore.
-        await runVerifyAndSetExit(result.repoRoot, config, options.json ?? false);
-      } else if (options.fixPlan) {
+        await runVerifyAndSetExit(root, config, options.json ?? false);
+        return;
+      }
+
+      const result = await radar(process.cwd());
+      const radarPath = await persistRadarResult(result);
+      const config = await loadConfig(result.repoRoot);
+
+      if (options.fixPlan) {
         const fixPlan = buildFixPlan(result);
         if (options.json) {
           printJson(fixPlan);

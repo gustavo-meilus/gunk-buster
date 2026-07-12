@@ -2,9 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig, type GunkConfig, type Voice } from "./config.js";
 import { refuse } from "./errors.js";
-import { resolveRepoRoot, runGit } from "./git.js";
+import { resolveRepoRoot } from "./git.js";
 import { buildFixPlan, loadRadarResult, type FixPlanItem } from "./radar.js";
 import { fixResultSchema, type FixApplied, type FixResult, type FixSkip } from "./schema.js";
+import { gitStatusFor } from "./trap.js";
 
 /**
  * `gunk radar --fix` (docs/specs/mvp-3-trap.md "Radar --fix"): apply MVP 2's
@@ -31,8 +32,8 @@ export interface FixOptions {
   onWarning?: (warning: string) => void;
 }
 
-/** Pick a refusal/skip message by voice without throwing — `refuse()`'s wording convention, for skip reasons that must be recorded rather than thrown. */
-function say(voice: Voice, chief: string, professional: string): string {
+/** Pick a skip/warning message by voice without throwing — `refuse()`'s wording convention, for reasons that must be recorded rather than thrown. */
+function voicedReason(voice: Voice, chief: string, professional: string): string {
   return voice === "professional" ? professional : chief;
 }
 
@@ -73,19 +74,17 @@ function findActualLine(
  * both. Returns the skip reason, or `undefined` when clean.
  */
 async function gitDirtyReason(root: string, relPath: string, voice: Voice): Promise<string | undefined> {
-  const status = (
-    await runGit(root, ["status", "--porcelain", "--untracked-files=all", "--", relPath])
-  ).trim();
+  const status = await gitStatusFor(root, relPath);
   if (status === "") return undefined;
 
   if (status.startsWith("??")) {
-    return say(
+    return voicedReason(
       voice,
       `"${relPath}" is untracked, Chief — skipped; git holds no copy to diff against. --force to fix it anyway.`,
       `"${relPath}" is untracked — skipped; use --force to fix anyway.`,
     );
   }
-  return say(
+  return voicedReason(
     voice,
     `"${relPath}" has uncommitted changes, Chief — skipped; commit first, or --force.`,
     `"${relPath}" has uncommitted changes — skipped; commit first, or use --force.`,
@@ -101,7 +100,7 @@ async function applyOneFix(root: string, item: FixPlanItem, voice: Voice): Promi
     raw = await readFile(abs, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return say(
+      return voicedReason(
         voice,
         `"${item.path}" isn't on disk anymore, Chief — re-run radar.`,
         `"${item.path}" is missing on disk — re-run radar.`,
@@ -113,7 +112,7 @@ async function applyOneFix(root: string, item: FixPlanItem, voice: Voice): Promi
   const lines = raw.split("\n");
   const lineIndex = findActualLine(lines, item.line, item.actual);
   if (lineIndex === undefined) {
-    return say(
+    return voicedReason(
       voice,
       `${item.path}:${item.line} has moved on me, Chief — re-run radar.`,
       `${item.path}:${item.line} — the flagged text has moved or changed; re-run radar.`,
