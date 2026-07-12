@@ -1,6 +1,6 @@
-import { execFile, execSync } from "node:child_process";
+import { execFile, execSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { appendFile, writeFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -38,6 +38,30 @@ async function runGunk(cwd: string, ...args: string[]): Promise<CliRun> {
     const e = error as { code?: number; stdout?: string; stderr?: string };
     return { exitCode: e.code ?? -1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
   }
+}
+
+/**
+ * Feeds a fixed script of answer lines to an interactive command's stdin up
+ * front, then waits for exit. `readline.question()` reads lines from stdin
+ * in order regardless of timing, so writing every answer before the process
+ * has asked for the first one is safe — no prompt/response synchronization
+ * needed, and no TTY to fake.
+ */
+async function runGunkInteractive(cwd: string, args: string[], answers: string[]): Promise<CliRun> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [cliPath, ...args], { cwd });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("close", (code) => resolve({ exitCode: code ?? -1, stdout, stderr }));
+    child.stdin.write(`${answers.join("\n")}\n`);
+    child.stdin.end();
+  });
 }
 
 describe("gunk scan — CLI smoke test", () => {
@@ -296,6 +320,103 @@ describe("gunk bust — CLI smoke test", () => {
     await runGunk(repo, "scan");
 
     const run = await runGunk(repo, "bust", "safe", "--yes");
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout.toLowerCase()).toContain("nothing");
+  });
+});
+
+describe("gunk ask — CLI smoke test", () => {
+  let repo: string;
+  let vaultParent: string;
+
+  beforeAll(async () => {
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+  });
+
+  afterEach(async () => {
+    await removeDir(repo);
+    await removeDir(vaultParent);
+  });
+
+  async function setUpRepo(): Promise<void> {
+    // backdated: two PROPOSE findings (docs/old-plan.md, assets/unused-diagram.png)
+    repo = await createFixtureRepo("orphan-docs", { commitDate: NINETY_DAYS_AGO });
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+  }
+
+  it("--json errors politely — ask is interactive by definition", async () => {
+    await setUpRepo();
+    const run = await runGunk(repo, "ask", "--json");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr.toLowerCase()).toContain("interactive");
+  });
+
+  it("walks PROPOSE findings, trapping one and keeping another, sharing one batchId", async () => {
+    await setUpRepo();
+
+    // scan order within the PROPOSE group: assets/unused-diagram.png, then docs/old-plan.md
+    const run = await runGunkInteractive(repo, ["ask"], ["t", "k"]);
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toContain("1 trapped, 1 kept, 0 skipped");
+
+    // the trapped item is gone; the kept item stays exactly where it was
+    expect(existsSync(path.join(repo, "assets", "unused-diagram.png"))).toBe(false);
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(true);
+
+    const keeps = JSON.parse(await readFile(path.join(repo, ".gunk-buster", "keeps.json"), "utf8"));
+    expect(keeps).toHaveLength(1);
+    expect(keeps[0].path).toBe("docs/old-plan.md");
+
+    // re-scanning shows the kept file's finding as verdict KEEP, keptBy chief
+    const rescan = await runGunk(repo, "scan", "--json");
+    const parsed = scanResultSchema.parse(JSON.parse(rescan.stdout));
+    const keptFinding = parsed.findings.find(
+      (f) => f.type === "file" && f.path === "docs/old-plan.md",
+    );
+    expect(keptFinding).toMatchObject({ verdict: "KEEP", keptBy: "chief" });
+  });
+
+  it("[q]uit stops the walk immediately — nothing trapped or kept", async () => {
+    await setUpRepo();
+
+    const run = await runGunkInteractive(repo, ["ask"], ["q"]);
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toContain("0 trapped, 0 kept, 0 skipped");
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(true);
+    expect(existsSync(path.join(repo, "assets", "unused-diagram.png"))).toBe(true);
+  });
+
+  it("an ASK_CHIEF item's prompt states the protection that fired, and [t]rap traps it", async () => {
+    // NOT backdated: the recently-modified protection caps both findings at
+    // ASK_CHIEF — ask's moat must still name the protection per item (spec
+    // "Trap" verdict ladder), not just walk it like any other action.
+    repo = await createFixtureRepo("orphan-docs");
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+
+    const run = await runGunkInteractive(repo, ["ask"], ["t", "t"]);
+    expect(run.exitCode).toBe(0);
+    expect(run.stderr).toContain("recently-modified");
+    expect(run.stdout).toContain("2 trapped, 0 kept, 0 skipped");
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(false);
+    expect(existsSync(path.join(repo, "assets", "unused-diagram.png"))).toBe(false);
+  });
+
+  it("with nothing PROPOSE or ASK_CHIEF on the pile, prints a human message and exits 0 without prompting", async () => {
+    repo = await createFixtureRepo("clean-repo");
+    vaultParent = await createTempDir();
+    await runGunk(repo, "scan");
+
+    const run = await runGunk(repo, "ask");
     expect(run.exitCode).toBe(0);
     expect(run.stdout.toLowerCase()).toContain("nothing");
   });

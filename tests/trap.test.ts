@@ -5,10 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type GunkConfig } from "../src/config.js";
 import { GunkError } from "../src/errors.js";
 import { hashIndexedFile } from "../src/file-index.js";
+import { writeKeep } from "../src/keeps.js";
 import { persistScanResult, scan } from "../src/scan.js";
 import { scanResultSchema, trapReceiptSchema } from "../src/schema.js";
 import { buildTrapId, findTrappableFinding, resolveVaultRoot, trap } from "../src/trap.js";
-import { NINETY_DAYS_AGO } from "./helpers/findings.js";
+import { NINETY_DAYS_AGO, fileFindings } from "./helpers/findings.js";
 import { createFixtureRepo, createTempDir, removeDir } from "./helpers/fixture.js";
 
 /** A fixed clock, so trap-ids in assertions are deterministic. */
@@ -251,6 +252,40 @@ describe("trap() git guards — dirty refusal and untracked warning", () => {
       onWarning: (w) => warnings.push(w),
     });
     expect(warnings).toEqual([]);
+  });
+});
+
+describe("trap() refuses a Chief-kept file — end to end through scan + keeps", () => {
+  let repo: string;
+  let vaultParent: string;
+  let config: GunkConfig;
+
+  beforeEach(async () => {
+    repo = await createFixtureRepo("orphan-docs", { commitDate: NINETY_DAYS_AGO });
+    vaultParent = await createTempDir();
+    config = defaultConfig();
+    config.trap.vaultRoot = path.join(vaultParent, "vault");
+  });
+
+  afterEach(async () => {
+    await removeDir(repo);
+    await removeDir(vaultParent);
+  });
+
+  it('refuses ("you told me to keep this, Chief") once a matching keep decision exists', async () => {
+    const scanResult = await scan(repo, config);
+    const original = fileFindings(scanResult).find((f) => f.path === "docs/old-plan.md")!;
+
+    await writeKeep(repo, {
+      path: "docs/old-plan.md",
+      contentHash: original.contentHash,
+      decidedAt: "2026-07-11T14:22:05.123Z",
+    });
+    await persistScanResult(await scan(repo, config)); // re-scan: keeps.json now applies
+
+    await expect(trap(repo, "docs/old-plan.md", { config })).rejects.toBeInstanceOf(GunkError);
+    await expect(trap(repo, "docs/old-plan.md", { config })).rejects.toThrow(/keep/i);
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(true);
   });
 });
 

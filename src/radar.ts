@@ -12,9 +12,9 @@ import { GunkError } from "./errors.js";
 import { buildFileIndex, readIndexedFile, type FileEntry } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
+import { GUNK_BUSTER_GITIGNORE } from "./gunk-buster-dir.js";
 import { buildPackageGraph } from "./package-graph.js";
 import type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
-import { GUNK_BUSTER_GITIGNORE } from "./scan.js";
 import {
   CLAIM_LABELS,
   radarResultSchema,

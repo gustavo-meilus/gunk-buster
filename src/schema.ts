@@ -35,6 +35,13 @@ export const fileFindingSchema = z.object({
    * bytes of their own to anchor.
    */
   contentHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  /**
+   * Present, and always `"chief"`, when this finding's verdict was
+   * overridden to KEEP by a matching keep decision (docs/specs/mvp-3-trap.md
+   * "Keep decisions") — distinguishes a Chief ruling from any other reason
+   * a finding might carry the KEEP verdict.
+   */
+  keptBy: z.literal("chief").optional(),
 });
 
 export const linkFindingSchema = z.object({
@@ -106,6 +113,20 @@ export const radarResultSchema = z.object({
   }),
   findings: z.array(claimFindingSchema),
 });
+
+/**
+ * One Chief keep decision (docs/specs/mvp-3-trap.md "Keep decisions"): a
+ * ruling pinned to the file's content at decision time. `scan()` overrides a
+ * matching finding's verdict to KEEP only while `contentHash` still matches
+ * the file's current bytes — the decision expires when the content changes.
+ */
+export const keepEntrySchema = z.object({
+  path: z.string(),
+  contentHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  decidedAt: z.iso.datetime(),
+});
+
+export type KeepEntry = z.infer<typeof keepEntrySchema>;
 
 /** A trap receipt's lifecycle (docs/specs/mvp-3-trap.md): trapped, then restored. Never any other value. */
 export const RECEIPT_STATUSES = ["trapped", "restored"] as const;
