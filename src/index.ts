@@ -36,8 +36,10 @@ export { writeReport, renderReportMarkdown, reportResultSchema } from "./report.
 export type { ReportResult } from "./report.js";
 export { radar, persistRadarResult, loadRadarResult, labelFor, summarizeRadarCounts } from "./radar.js";
 export type { AuditFile, RadarCheck, RadarContext } from "./radar.js";
-export { trap, findTrappableFinding, protectionSummary, resolveVaultRoot, buildTrapId } from "./trap.js";
+export { trap, findTrappableFinding, protectionSummary, resolveVaultRoot, buildTrapId, buildBatchId } from "./trap.js";
 export type { TrapOptions } from "./trap.js";
+export { bust, findSafeFindings } from "./bust.js";
+export type { BustOptions } from "./bust.js";
 export { restore, loadReceipts } from "./restore.js";
 export { verify } from "./verify.js";
 export type { VerifyContext } from "./verify.js";
