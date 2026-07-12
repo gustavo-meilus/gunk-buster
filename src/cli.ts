@@ -200,7 +200,7 @@ program
     }
     // Exit 0 unless the auto-run verify finds damage (ADR-0005) — a
     // successful trap itself is never a failure (ADR-0004 is about findings).
-    await verifyAfterMutation(root, config, options.json ?? false);
+    await runVerifyAndSetExit(root, config, options.json ?? false);
   });
 
 /** A trap-id starts with its filesystem-safe UTC timestamp — the one shape a repo path can't take. */
@@ -251,17 +251,19 @@ program
       }
       // Exit 0 unless the auto-run verify finds damage (ADR-0005) — the
       // restore itself, done as told, is never a failure (ADR-0004).
-      await verifyAfterMutation(root, config, options.json ?? false);
+      await runVerifyAndSetExit(root, config, options.json ?? false);
     },
   );
 
 /**
- * The auto-run closing every mutation (spec: verify runs after trap and
- * restore). Under `--json` the primary command owns stdout (one schema-valid
- * document), so verify's human rendering goes to stderr — the same surface
- * refusals use. A failed verify sets the non-zero exit either way (ADR-0005).
+ * The one place verify's `passed: false` becomes a non-zero exit — the sole
+ * findings-independent failure exit in the tool (ADR-0005; ADR-0004 stands
+ * everywhere else). Shared by the standalone command and the auto-run
+ * closing trap/restore. Under `--json` the primary command owns stdout (one
+ * schema-valid document), so verify's human rendering goes to stderr — the
+ * same surface refusals use.
  */
-async function verifyAfterMutation(root: string, config: GunkConfig, json: boolean): Promise<void> {
+async function runVerifyAndSetExit(root: string, config: GunkConfig, json: boolean): Promise<void> {
   const result = await verify(root, { config });
   const rendered = `${renderVerifyHuman(config.voice, result)}\n`;
   (json ? process.stderr : process.stdout).write(rendered);
@@ -277,16 +279,15 @@ program
   .action(async (options: { json?: boolean }) => {
     const root = await resolveRepoRoot(process.cwd());
     const config = await loadConfig(root);
-    const result = await verify(root, { config });
 
     if (options.json) {
+      // Standalone --json is the one caller that wants the document itself.
+      const result = await verify(root, { config });
       printJson(result);
+      if (!result.passed) process.exitCode = 1;
     } else {
-      process.stdout.write(`${renderVerifyHuman(config.voice, result)}\n`);
+      await runVerifyAndSetExit(root, config, false);
     }
-    // The sole findings-independent failure exit in the tool (ADR-0005):
-    // damage attributable to a mutation, never findings-as-failure (ADR-0004).
-    if (!result.passed) process.exitCode = 1;
   });
 
 try {
