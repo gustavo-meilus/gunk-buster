@@ -172,7 +172,7 @@ async function confirm(promptText: string): Promise<boolean> {
 program
   .command("trap")
   .description(
-    "Move a SAFE- or PROPOSE-verdict file finding to the vault, and write a git-tracked receipt",
+    "Move a scan-judged file finding to the vault (ASK_CHIEF only behind its mandatory confirmation), and write a git-tracked receipt",
   )
   .argument("<path>", "path (relative to cwd, or absolute) of the file finding to trap")
   .option("--yes", "skip the SAFE/PROPOSE confirmation prompt (never the ASK_CHIEF one)")
