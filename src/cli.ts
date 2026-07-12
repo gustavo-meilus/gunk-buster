@@ -15,6 +15,7 @@ import { restore, type RestoreRef } from "./restore.js";
 import { findTrappableFinding, trap } from "./trap.js";
 import { verify } from "./verify.js";
 import {
+  renderAskChiefConfirmation,
   renderRestoreHuman,
   renderVerifyHuman,
   renderFixPlanHuman,
@@ -171,19 +172,31 @@ async function confirm(promptText: string): Promise<boolean> {
 program
   .command("trap")
   .description(
-    "Move a SAFE- or PROPOSE-verdict file finding to the vault, and write a git-tracked receipt",
+    "Move a scan-judged file finding to the vault (ASK_CHIEF only behind its mandatory confirmation), and write a git-tracked receipt",
   )
   .argument("<path>", "path (relative to cwd, or absolute) of the file finding to trap")
-  .option("--yes", "skip the confirmation prompt")
+  .option("--yes", "skip the SAFE/PROPOSE confirmation prompt (never the ASK_CHIEF one)")
+  .option("--force", "trap a tracked file with uncommitted changes anyway")
   .option("--json", "print the Receipt document to stdout")
-  .action(async (pathArg: string, options: { yes?: boolean; json?: boolean }) => {
+  .action(async (pathArg: string, options: { yes?: boolean; force?: boolean; json?: boolean }) => {
     const root = await resolveRepoRoot(process.cwd());
     const config = await loadConfig(root);
     const scanResult = await loadScanResult(root);
     const relPath = toFindingPath(root, process.cwd(), pathArg);
     const finding = findTrappableFinding(scanResult, relPath, config.voice);
 
-    if (!options.yes) {
+    // ASK_CHIEF: the confirmation is mandatory and interactive — --yes does
+    // not apply, and under --json the engine refuses (agents must surface
+    // these to the Chief; the moat has no flag-shaped gate).
+    let askChiefConfirmed = false;
+    if (finding.verdict === "ASK_CHIEF" && !options.json) {
+      const proceed = await confirm(renderAskChiefConfirmation(config.voice, finding));
+      if (!proceed) {
+        process.stdout.write(`${renderTrapDeclinedHuman(config.voice)}\n`);
+        return;
+      }
+      askChiefConfirmed = true;
+    } else if (finding.verdict !== "ASK_CHIEF" && !options.yes) {
       const proceed = await confirm(renderTrapConfirmation(config.voice, finding));
       if (!proceed) {
         process.stdout.write(`${renderTrapDeclinedHuman(config.voice)}\n`);
@@ -191,7 +204,12 @@ program
       }
     }
 
-    const receipt = await trap(root, relPath, { config });
+    const receipt = await trap(root, relPath, {
+      config,
+      askChiefConfirmed,
+      force: options.force ?? false,
+      onWarning: (warning) => process.stderr.write(`${warning}\n`),
+    });
 
     if (options.json) {
       printJson(receipt);

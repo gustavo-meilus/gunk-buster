@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { Voice } from "./config.js";
+import { protectionSummary } from "./trap.js";
 import type { FixPlanResult } from "./radar.js";
 import type { PileFinding, PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
@@ -142,6 +143,22 @@ export function renderTrapConfirmation(voice: Voice, finding: FileFinding): stri
   return voice === "professional"
     ? `Trap ${finding.path} as ${finding.label} (${finding.verdict})? Evidence: ${rationale}\n[y/N] `
     : `Chief, trapping ${finding.path} as ${finding.label} (${finding.verdict}) — evidence: ${rationale}.\nTrap it? [y/N] `;
+}
+
+/**
+ * The mandatory ASK_CHIEF confirmation (spec "Verdict ladder"): states the
+ * protection that fired and that no flag stands in for the Chief's word —
+ * `--yes` does not apply here. Ends without a newline (it's a prompt).
+ */
+export function renderAskChiefConfirmation(voice: Voice, finding: FileFinding): string {
+  const fired = protectionSummary(finding);
+  const rationale = finding.evidence
+    .map((e) => `${e.rule} (${e.confidence}): ${e.rationale}`)
+    .join("; ");
+
+  return voice === "professional"
+    ? `${finding.path} is ASK_CHIEF — protection fired: ${fired}. Evidence: ${rationale}\nThis confirmation is mandatory (--yes does not apply). Trap it?\n[y/N] `
+    : `Chief, ${finding.path} is ASK_CHIEF — protection fired: ${fired}. Evidence: ${rationale}.\nThis one needs your word — no flag speaks for you (--yes doesn't apply). Trap it? [y/N] `;
 }
 
 export function renderTrapDeclinedHuman(voice: Voice): string {

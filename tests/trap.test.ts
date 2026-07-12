@@ -141,14 +141,14 @@ describe("trap(repoRoot, path, opts) — engine seam", () => {
   });
 });
 
-describe("trap() verdict ladder — walking-skeleton scope (SAFE/PROPOSE only)", () => {
+describe("trap() verdict ladder — ASK_CHIEF's mandatory confirmation", () => {
   let repo: string;
   let vaultParent: string;
   let config: GunkConfig;
 
   beforeEach(async () => {
-    // NOT backdated: the recency protection caps these findings at ASK_CHIEF,
-    // which this ticket's thin ladder refuses.
+    // NOT backdated: the recently-modified soft protection caps these
+    // findings at ASK_CHIEF.
     repo = await createFixtureRepo("orphan-docs");
     vaultParent = await createTempDir();
     config = defaultConfig();
@@ -161,9 +161,96 @@ describe("trap() verdict ladder — walking-skeleton scope (SAFE/PROPOSE only)",
     await removeDir(vaultParent);
   });
 
-  it("refuses an ASK_CHIEF finding (mandatory confirmation lands in a later ticket)", async () => {
+  it("refuses ASK_CHIEF without the interactive confirmation, naming the protection that fired", async () => {
     await expect(trap(repo, "docs/old-plan.md", { config })).rejects.toBeInstanceOf(GunkError);
+    await expect(trap(repo, "docs/old-plan.md", { config })).rejects.toThrow(/recently-modified/);
+    // a refusal never mutates
     expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(true);
+  });
+
+  it("still refuses ASK_CHIEF when force is set — force is a git knob, not a moat bypass", async () => {
+    await expect(
+      trap(repo, "docs/old-plan.md", { config, force: true }),
+    ).rejects.toThrow(/recently-modified/);
+  });
+
+  it("traps ASK_CHIEF once the Chief's interactive confirmation is carried in", async () => {
+    const receipt = await trap(repo, "docs/old-plan.md", {
+      config,
+      now: fixedClock,
+      askChiefConfirmed: true,
+    });
+
+    expect(receipt.verdict).toBe("ASK_CHIEF");
+    expect(receipt.status).toBe("trapped");
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(false);
+  });
+});
+
+describe("trap() git guards — dirty refusal and untracked warning", () => {
+  let repo: string;
+  let vaultParent: string;
+  let config: GunkConfig;
+
+  beforeEach(async () => {
+    repo = await createFixtureRepo("orphan-docs", { commitDate: NINETY_DAYS_AGO });
+    vaultParent = await createTempDir();
+    config = defaultConfig();
+    config.trap.vaultRoot = path.join(vaultParent, "vault");
+    await persistScanResult(await scan(repo, config));
+  });
+
+  afterEach(async () => {
+    await removeDir(repo);
+    await removeDir(vaultParent);
+  });
+
+  it("refuses a tracked file with uncommitted changes without force", async () => {
+    await writeFile(path.join(repo, "docs", "old-plan.md"), "edited but not committed\n");
+    await persistScanResult(await scan(repo, config)); // re-scan so the staleness guard is satisfied
+
+    await expect(trap(repo, "docs/old-plan.md", { config })).rejects.toBeInstanceOf(GunkError);
+    await expect(trap(repo, "docs/old-plan.md", { config })).rejects.toThrow(/--force/);
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(true);
+  });
+
+  it("traps a dirty tracked file when force is set", async () => {
+    await writeFile(path.join(repo, "docs", "old-plan.md"), "edited but not committed\n");
+    await persistScanResult(await scan(repo, config));
+
+    const receipt = await trap(repo, "docs/old-plan.md", { config, now: fixedClock, force: true });
+
+    expect(receipt.status).toBe("trapped");
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(false);
+  });
+
+  it("traps an untracked file with a loud warning that git holds no copy", async () => {
+    // untracked: written after the fixture commit, never git-added; no git
+    // date means no recency protection, so the orphan doc lands PROPOSE
+    await writeFile(path.join(repo, "docs", "scratch-notes.md"), "# Scratch\n\nuntracked orphan\n");
+    await persistScanResult(await scan(repo, config));
+
+    const warnings: string[] = [];
+    const receipt = await trap(repo, "docs/scratch-notes.md", {
+      config,
+      now: fixedClock,
+      onWarning: (w) => warnings.push(w),
+    });
+
+    expect(receipt.status).toBe("trapped");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/git/i);
+    expect(warnings[0]).toMatch(/only/i);
+  });
+
+  it("emits no warning for a tracked, clean file", async () => {
+    const warnings: string[] = [];
+    await trap(repo, "docs/old-plan.md", {
+      config,
+      now: fixedClock,
+      onWarning: (w) => warnings.push(w),
+    });
+    expect(warnings).toEqual([]);
   });
 });
 

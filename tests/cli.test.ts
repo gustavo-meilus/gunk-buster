@@ -179,6 +179,49 @@ describe("gunk restore — CLI smoke test", () => {
   });
 });
 
+describe("gunk trap — verdict ladder and git guards (CLI smoke test)", () => {
+  let repo: string;
+  let vaultParent: string;
+
+  beforeAll(async () => {
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+    // NOT backdated: the recently-modified protection caps findings at ASK_CHIEF
+    repo = await createFixtureRepo("orphan-docs");
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+    await removeDir(vaultParent);
+  });
+
+  it("refuses an ASK_CHIEF trap under --json — no flag bypasses the mandatory confirmation", async () => {
+    const run = await runGunk(repo, "trap", "docs/old-plan.md", "--yes", "--json");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr).toContain("ASK_CHIEF");
+    expect(run.stderr).toContain("recently-modified");
+    expect(existsSync(path.join(repo, "docs", "old-plan.md"))).toBe(true);
+  });
+
+  it("traps an untracked file with a loud stderr warning that git holds no copy", async () => {
+    await writeFile(path.join(repo, "docs", "scratch-notes.md"), "# Scratch\n\nuntracked orphan\n");
+    await runGunk(repo, "scan");
+
+    const run = await runGunk(repo, "trap", "docs/scratch-notes.md", "--yes", "--json");
+    expect(run.exitCode).toBe(0);
+    expect(run.stderr).toMatch(/git/i);
+    expect(trapReceiptSchema.parse(JSON.parse(run.stdout)).originalPath).toBe(
+      "docs/scratch-notes.md",
+    );
+    expect(existsSync(path.join(repo, "docs", "scratch-notes.md"))).toBe(false);
+  });
+});
+
 describe("gunk verify — CLI smoke test", () => {
   let repo: string;
   let vaultParent: string;
