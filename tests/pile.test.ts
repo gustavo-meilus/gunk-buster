@@ -17,6 +17,7 @@ function fileFinding(overrides: Partial<FileFinding> = {}): FileFinding {
     verdict: "SAFE",
     evidence: [{ rule: "generated-build-dir", confidence: "CERTAIN", rationale: "..." }],
     protections: [],
+    contentHash: "sha256:" + "a".repeat(64),
     ...overrides,
   };
 }
@@ -65,7 +66,7 @@ describe("buildPileResult(scan) — grouping findings by label for `gunk pile`",
     ];
 
     const result = buildPileResult({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scannedAt: "2026-07-10T00:00:00.000Z",
       repoRoot: "/repo",
       counts: { byVerdict: { SAFE: 1, PROPOSE: 1 }, byLabel: { DUMP: 2 } },
@@ -90,7 +91,7 @@ describe("buildPileResult(scan) — grouping findings by label for `gunk pile`",
     ];
 
     const result = buildPileResult({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scannedAt: "2026-07-10T00:00:00.000Z",
       repoRoot: "/repo",
       counts: { byVerdict: {}, byLabel: {} },
@@ -104,7 +105,7 @@ describe("buildPileResult(scan) — grouping findings by label for `gunk pile`",
     const findings: Finding[] = [linkFinding()];
 
     const result = buildPileResult({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scannedAt: "2026-07-10T00:00:00.000Z",
       repoRoot: "/repo",
       counts: { byVerdict: {}, byLabel: {} },
@@ -118,7 +119,7 @@ describe("buildPileResult(scan) — grouping findings by label for `gunk pile`",
 
   it("produces no groups for an empty findings list", () => {
     const result = buildPileResult({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scannedAt: "2026-07-10T00:00:00.000Z",
       repoRoot: "/repo",
       counts: { byVerdict: {}, byLabel: {} },
@@ -130,7 +131,7 @@ describe("buildPileResult(scan) — grouping findings by label for `gunk pile`",
 
   it("carries scannedAt and repoRoot through from the scan result", () => {
     const result = buildPileResult({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scannedAt: "2026-07-10T00:00:00.000Z",
       repoRoot: "/repo",
       counts: { byVerdict: {}, byLabel: {} },
@@ -144,7 +145,7 @@ describe("buildPileResult(scan) — grouping findings by label for `gunk pile`",
 
 describe("buildPileResult(scan, radar) — merging the radar index in (#13)", () => {
   const scan = {
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     scannedAt: "2026-07-10T00:00:00.000Z",
     repoRoot: "/repo",
     counts: { byVerdict: { SAFE: 1 }, byLabel: { DUMP: 1 } },

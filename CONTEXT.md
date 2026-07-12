@@ -105,5 +105,9 @@ Byte-identical recovery of a trapped file from its receipt.
 **Bust**:
 Batch-trap all SAFE-verdict findings behind Chief approval.
 
+**Keep decision** _(Trap)_:
+A Chief ruling, pinned to a file's content, that a finding is not gunk. Expires when the content changes.
+_Avoid_: ignore, suppress, whitelist
+
 **Context Benchmark**:
 The before/after measurement: identical prompt in fresh agent sessions, comparing wall-clock time and `/context` token usage pre- and post-gunk-process.

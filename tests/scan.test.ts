@@ -4,7 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { GunkError } from "../src/errors.js";
 import { loadScanResult, persistScanResult, scan } from "../src/scan.js";
-import { scanResultSchema } from "../src/schema.js";
+import { scanResultSchema, type ScanResult } from "../src/schema.js";
+import { fileFindings } from "./helpers/findings.js";
 import { createFixtureRepo, createTempDir, removeDir } from "./helpers/fixture.js";
 
 describe("scan(repoRoot, config) — engine seam", () => {
@@ -23,7 +24,7 @@ describe("scan(repoRoot, config) — engine seam", () => {
 
     // the zod schema is the single source of truth for the contract
     const parsed = scanResultSchema.parse(result);
-    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.schemaVersion).toBe(2);
     expect(parsed.findings).toEqual([]);
     expect(parsed.counts).toEqual({ byVerdict: {}, byLabel: {} });
     expect(Number.isNaN(Date.parse(parsed.scannedAt))).toBe(false);
@@ -50,7 +51,7 @@ describe("scan(repoRoot, config) — engine seam", () => {
         "findings": [],
         "repoRoot": "<repoRoot>",
         "scannedAt": "<scannedAt>",
-        "schemaVersion": 1,
+        "schemaVersion": 2,
       }
     `);
   });
@@ -81,6 +82,42 @@ describe("scan(repoRoot, config) — engine seam", () => {
     } finally {
       await removeDir(dir);
     }
+  });
+});
+
+describe("scan(repoRoot, config) — contentHash, the MVP 3 staleness anchor (#15)", () => {
+  let repo: string;
+  let result: ScanResult;
+
+  beforeAll(async () => {
+    repo = await createFixtureRepo("orphan-docs");
+    result = await scan(repo, defaultConfig());
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  it("stamps every file finding with a sha256 contentHash", () => {
+    const findings = fileFindings(result);
+    expect(findings.length).toBeGreaterThan(0);
+    for (const finding of findings) {
+      expect(finding.contentHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    }
+  });
+
+  it("never stamps a link finding with contentHash — file bytes only", () => {
+    const linkFindingsOnly = result.findings.filter((f) => f.type === "link");
+    for (const finding of linkFindingsOnly) {
+      expect(finding).not.toHaveProperty("contentHash");
+    }
+  });
+
+  it("hash stability: re-scanning unchanged bytes produces the identical hash", async () => {
+    const again = await scan(repo, defaultConfig());
+    const before = fileFindings(result)[0]!;
+    const after = fileFindings(again).find((f) => f.path === before.path)!;
+    expect(after.contentHash).toBe(before.contentHash);
   });
 });
 

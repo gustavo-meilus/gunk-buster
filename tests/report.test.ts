@@ -17,13 +17,14 @@ function fileFinding(overrides: Partial<FileFinding> = {}): FileFinding {
       },
     ],
     protections: [],
+    contentHash: "sha256:" + "a".repeat(64),
     ...overrides,
   };
 }
 
 function scanResult(findings: ScanResult["findings"]): ScanResult {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     scannedAt: "2026-07-10T00:00:00.000Z",
     repoRoot: "/repo",
     counts: { byVerdict: {}, byLabel: {} },
