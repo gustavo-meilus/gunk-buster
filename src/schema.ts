@@ -197,6 +197,29 @@ export type VerifyDamage = z.infer<typeof verifyDamageSchema>;
 export type VerifyCommandRun = z.infer<typeof verifyCommandRunSchema>;
 export type VerifyResult = z.infer<typeof verifyResultSchema>;
 
+/** One SAFE finding `gunk bust safe` declined to trap — the per-file staleness or git guard fired. */
+export const bustSkipSchema = z.object({
+  path: z.string(),
+  reason: z.string(),
+});
+
+/**
+ * The bust contract, schemaVersion 1 (docs/specs/mvp-3-trap.md "Bust"): the
+ * outcome of one `gunk bust safe` run — every SAFE-verdict finding either
+ * trapped (sharing this run's `batchId`) or skipped with the guard's reason.
+ * Verify is not embedded here — it runs once, separately, after the batch,
+ * same as trap/restore.
+ */
+export const bustResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  batchId: z.string(),
+  trapped: z.array(trapReceiptSchema),
+  skipped: z.array(bustSkipSchema),
+});
+
+export type BustSkip = z.infer<typeof bustSkipSchema>;
+export type BustResult = z.infer<typeof bustResultSchema>;
+
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 export type TrapReceipt = z.infer<typeof trapReceiptSchema>;
 

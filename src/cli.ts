@@ -3,8 +3,9 @@ import { createInterface } from "node:readline/promises";
 import path from "node:path";
 import { Command } from "commander";
 import packageJson from "../package.json" with { type: "json" };
+import { bust, findSafeFindings } from "./bust.js";
 import { loadConfig, type GunkConfig } from "./config.js";
-import { GunkError } from "./errors.js";
+import { GunkError, refuse } from "./errors.js";
 import { resolveRepoRoot } from "./git.js";
 import { buildPileResult } from "./pile.js";
 import { buildFixPlan, persistRadarResult, radar, tryLoadRadarResult } from "./radar.js";
@@ -16,6 +17,9 @@ import { findTrappableFinding, trap } from "./trap.js";
 import { verify } from "./verify.js";
 import {
   renderAskChiefConfirmation,
+  renderBustConfirmation,
+  renderBustEmptyHuman,
+  renderBustHuman,
   renderRestoreHuman,
   renderVerifyHuman,
   renderFixPlanHuman,
@@ -218,6 +222,75 @@ program
     }
     // Exit 0 unless the auto-run verify finds damage (ADR-0005) — a
     // successful trap itself is never a failure (ADR-0004 is about findings).
+    await runVerifyAndSetExit(root, config, options.json ?? false);
+  });
+
+program
+  .command("bust")
+  .description(
+    'Batch-trap every SAFE-verdict finding behind one Chief confirmation, then run verify once ("safe" is the only tier)',
+  )
+  .argument("[tier]", 'must be "safe" — the only bust tier in MVP 3')
+  .option("--yes", "pre-approve the single batch confirmation")
+  .option("--json", "print the BustResult document to stdout")
+  .action(async (tier: string | undefined, options: { yes?: boolean; json?: boolean }) => {
+    const root = await resolveRepoRoot(process.cwd());
+    const config = await loadConfig(root);
+
+    if (tier === undefined) {
+      refuse(
+        config.voice,
+        'Bust what, Chief? Try "gunk bust safe".',
+        'bust requires a tier argument — try "gunk bust safe".',
+      );
+    }
+    if (tier !== "safe") {
+      refuse(
+        config.voice,
+        `I don't know a "${tier}" tier, Chief — only "safe" exists so far.`,
+        `Unknown bust tier "${tier}" — only "safe" exists.`,
+      );
+    }
+
+    const scanResult = await loadScanResult(root);
+    const findings = findSafeFindings(scanResult);
+
+    if (findings.length === 0) {
+      process.stdout.write(`${renderBustEmptyHuman(config.voice)}\n`);
+      return;
+    }
+
+    let confirmed = options.yes ?? false;
+    if (!confirmed) {
+      // No TTY under --json — the single confirmation can't happen, so
+      // --yes is the only way in (spec: "bust refuses to act without --yes").
+      if (options.json) {
+        refuse(
+          config.voice,
+          "Bust needs your yes, Chief — pass --yes under --json.",
+          "bust requires --yes under --json.",
+        );
+      }
+      confirmed = await confirm(renderBustConfirmation(config.voice, findings));
+      if (!confirmed) {
+        process.stdout.write(`${renderTrapDeclinedHuman(config.voice)}\n`);
+        return;
+      }
+    }
+
+    const result = await bust(root, {
+      config,
+      confirmed: true,
+      onWarning: (warning) => process.stderr.write(`${warning}\n`),
+    });
+
+    if (options.json) {
+      printJson(result);
+    } else {
+      process.stdout.write(`${renderBustHuman(config.voice, result)}\n`);
+    }
+    // Exit 0 unless the auto-run verify finds damage (ADR-0005) — same
+    // convention as trap/restore.
     await runVerifyAndSetExit(root, config, options.json ?? false);
   });
 

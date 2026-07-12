@@ -38,6 +38,8 @@ export { radar, persistRadarResult, loadRadarResult, labelFor, summarizeRadarCou
 export type { AuditFile, RadarCheck, RadarContext } from "./radar.js";
 export { trap, findTrappableFinding, protectionSummary, resolveVaultRoot, buildTrapId } from "./trap.js";
 export type { TrapOptions } from "./trap.js";
+export { bust, findSafeFindings } from "./bust.js";
+export type { BustOptions } from "./bust.js";
 export { restore, loadReceipts } from "./restore.js";
 export { verify } from "./verify.js";
 export type { VerifyContext } from "./verify.js";

@@ -4,8 +4,9 @@ import { appendFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  bustResultSchema,
   radarResultSchema,
   scanResultSchema,
   trapReceiptSchema,
@@ -219,6 +220,84 @@ describe("gunk trap — verdict ladder and git guards (CLI smoke test)", () => {
       "docs/scratch-notes.md",
     );
     expect(existsSync(path.join(repo, "docs", "scratch-notes.md"))).toBe(false);
+  });
+});
+
+describe("gunk bust — CLI smoke test", () => {
+  let repo: string;
+  let vaultParent: string;
+
+  beforeAll(async () => {
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+  });
+
+  afterEach(async () => {
+    await removeDir(repo);
+    await removeDir(vaultParent);
+  });
+
+  async function setUpRepo(): Promise<void> {
+    repo = await createFixtureRepo("generated-dumps", { commitDate: NINETY_DAYS_AGO });
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+  }
+
+  it('bare "gunk bust" errors ("bust what, Chief?") and exits non-zero', async () => {
+    await setUpRepo();
+    const run = await runGunk(repo, "bust");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr).toContain("Chief");
+  });
+
+  it('an unknown tier is refused — "safe" is the only one', async () => {
+    await setUpRepo();
+    const run = await runGunk(repo, "bust", "propose");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr).toContain("propose");
+  });
+
+  it("--yes --json traps every SAFE finding under one batchId and exits 0, then --batch restore undoes it all", async () => {
+    await setUpRepo();
+    const bustRun = await runGunk(repo, "bust", "safe", "--yes", "--json");
+    expect(bustRun.exitCode).toBe(0);
+    expect(bustRun.stdout).not.toContain("Chief");
+
+    const result = bustResultSchema.parse(JSON.parse(bustRun.stdout));
+    expect(result.trapped).toHaveLength(2);
+    expect(result.trapped.every((r) => r.batchId === result.batchId)).toBe(true);
+    expect(existsSync(path.join(repo, "dist", "bundle.js"))).toBe(false);
+    expect(existsSync(path.join(repo, "coverage", "lcov.info"))).toBe(false);
+
+    const restoreRun = await runGunk(repo, "restore", "--batch", result.batchId, "--json");
+    expect(restoreRun.exitCode).toBe(0);
+    expect(existsSync(path.join(repo, "dist", "bundle.js"))).toBe(true);
+    expect(existsSync(path.join(repo, "coverage", "lcov.info"))).toBe(true);
+  });
+
+  it("under --json without --yes, bust refuses to act", async () => {
+    await setUpRepo();
+    const run = await runGunk(repo, "bust", "safe", "--json");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr).toContain("--yes");
+    expect(existsSync(path.join(repo, "dist", "bundle.js"))).toBe(true);
+  });
+
+  it("with nothing SAFE on the pile, prints a human message and exits 0 without prompting", async () => {
+    repo = await createFixtureRepo("clean-repo");
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+
+    const run = await runGunk(repo, "bust", "safe", "--yes");
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout.toLowerCase()).toContain("nothing");
   });
 });
 

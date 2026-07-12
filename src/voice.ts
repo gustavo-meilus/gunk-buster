@@ -6,6 +6,7 @@ import type { PileFinding, PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
 import type { RestoreResult } from "./restore.js";
 import type {
+  BustResult,
   FileFinding,
   RadarResult,
   ScanResult,
@@ -280,6 +281,66 @@ export function renderVerifyHuman(voice: Voice, result: VerifyResult): string {
       voice === "professional" ? "Verify FAILED. To undo:" : "Verify FAILED, Chief. The way back:",
     );
     lines.push(...result.restoreCommands);
+  }
+  return lines.join("\n");
+}
+
+/** One line per SAFE finding for the bust confirmation list: path, label, one-line evidence (spec). */
+function formatSafeFinding(finding: FileFinding): string {
+  const rationale = finding.evidence.map((e) => e.rationale).join("; ");
+  return `  ${finding.path} — ${finding.label} — ${rationale}`;
+}
+
+export function renderBustEmptyHuman(voice: Voice): string {
+  return voice === "professional"
+    ? "No SAFE findings. Nothing to bust."
+    : "Chief, nothing SAFE on the pile — nothing to bust.";
+}
+
+/**
+ * `gunk bust safe`'s single batch confirmation (spec: "Prints the full list
+ * ... then a single 'Trap these N files, Chief?'"). Ends without a newline
+ * — it's a prompt, the answer is typed on the same line.
+ */
+export function renderBustConfirmation(voice: Voice, findings: FileFinding[]): string {
+  const lines: string[] = [
+    voice === "professional" ? "SAFE findings:" : "Chief, here's what's SAFE to trap:",
+  ];
+  for (const finding of findings) {
+    lines.push(formatSafeFinding(finding));
+  }
+  lines.push(
+    voice === "professional"
+      ? `Trap these ${findings.length} files? [y/N] `
+      : `Trap these ${findings.length} files, Chief? [y/N] `,
+  );
+  return lines.join("\n");
+}
+
+/** Human summary after a bust run: every trap, every skip (with its guard's reason), then the commit nudge if anything moved. */
+export function renderBustHuman(voice: Voice, result: BustResult): string {
+  const lines: string[] = [];
+
+  for (const receipt of result.trapped) {
+    lines.push(
+      voice === "professional"
+        ? `Trapped: ${receipt.originalPath} -> ${receipt.vaultPath}`
+        : `Chief, ${receipt.originalPath} is in the vault — ${receipt.vaultPath}.`,
+    );
+  }
+  for (const skip of result.skipped) {
+    lines.push(
+      voice === "professional"
+        ? `Skipped ${skip.path}: ${skip.reason}`
+        : `Left ${skip.path} alone, Chief — ${skip.reason}`,
+    );
+  }
+  if (result.trapped.length > 0) {
+    lines.push(
+      voice === "professional"
+        ? "Commit the receipts to make this stick."
+        : "Commit the receipts when you get a sec, Chief.",
+    );
   }
   return lines.join("\n");
 }
