@@ -3,7 +3,7 @@ import type { Voice } from "./config.js";
 import type { FixPlanResult } from "./radar.js";
 import type { PileFinding, PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
-import type { RadarResult, ScanResult, Verdict } from "./schema.js";
+import type { FileFinding, RadarResult, ScanResult, TrapReceipt, Verdict } from "./schema.js";
 
 /**
  * The Chief voice (CONTEXT.md "Chief"): compact, playful, concrete human
@@ -118,6 +118,42 @@ export function renderReportHuman(voice: Voice, report: ReportResult): string {
   return voice === "professional"
     ? `Report written to ${rel}.`
     : `Chief, report's written — ${rel}.`;
+}
+
+/**
+ * The single SAFE/PROPOSE confirmation prompt (spec: "single confirmation
+ * showing the evidence") `gunk trap` prints before mutating anything, unless
+ * `--yes` skips it. Ends without a newline — it's a prompt, the answer is
+ * typed on the same line.
+ */
+export function renderTrapConfirmation(voice: Voice, finding: FileFinding): string {
+  const rationale = finding.evidence
+    .map((e) => `${e.rule} (${e.confidence}): ${e.rationale}`)
+    .join("; ");
+
+  return voice === "professional"
+    ? `Trap ${finding.path} as ${finding.label} (${finding.verdict})? Evidence: ${rationale}\n[y/N] `
+    : `Chief, trapping ${finding.path} as ${finding.label} (${finding.verdict}) — evidence: ${rationale}.\nTrap it? [y/N] `;
+}
+
+export function renderTrapDeclinedHuman(voice: Voice): string {
+  return voice === "professional" ? "Not trapping." : "Not trapping, Chief.";
+}
+
+/** Human summary after a successful trap — always ends with the commit nudge (spec: git is the Chief's job). */
+export function renderTrapHuman(voice: Voice, receipt: TrapReceipt): string {
+  const receiptRel = `.gunk-buster/receipts/${receipt.trapId}.json`;
+  return voice === "professional"
+    ? [
+        `Trapped: ${receipt.originalPath} -> ${receipt.vaultPath}`,
+        `Receipt: ${receiptRel}`,
+        "Commit the receipt to make this stick.",
+      ].join("\n")
+    : [
+        `Chief, ${receipt.originalPath} is in the vault — ${receipt.vaultPath}.`,
+        `Receipt stashed at ${receiptRel}.`,
+        "Commit it when you get a sec, Chief.",
+      ].join("\n");
 }
 
 /**
