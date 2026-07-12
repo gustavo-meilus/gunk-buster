@@ -3,22 +3,31 @@ import path from "node:path";
 import { loadConfig, type GunkConfig, type Voice } from "./config.js";
 import { refuse } from "./errors.js";
 import { hashIndexedFile } from "./file-index.js";
-import { resolveRepoRoot } from "./git.js";
+import { resolveRepoRoot, runGit } from "./git.js";
 import { GUNK_BUSTER_GITIGNORE, loadScanResult } from "./scan.js";
 import { trapReceiptSchema, type FileFinding, type ScanResult, type TrapReceipt } from "./schema.js";
 
 /**
- * `gunk trap` — the walking skeleton of MVP 3's safety moat
- * (docs/specs/mvp-3-trap.md): move one scan-judged file finding to the
- * external vault and leave a git-tracked receipt behind. A pure filesystem
- * move plus a receipt write — never a git command (spec: "Gunk Buster never
- * mutates git"). Scope is deliberately thin (ticket #16): SAFE/PROPOSE only.
- * ASK_CHIEF's mandatory confirmation, keep-decision refusals, the
- * git-dirty-tree guard, and verify wiring land in later tickets.
+ * `gunk trap` — MVP 3's safety moat (docs/specs/mvp-3-trap.md): move one
+ * scan-judged file finding to the external vault and leave a git-tracked
+ * receipt behind. A pure filesystem move plus a receipt write — never a git
+ * command (spec: "Gunk Buster never mutates git"; the status *read* below
+ * mutates nothing). The full verdict ladder applies: SAFE/PROPOSE trap
+ * behind one skippable confirmation, ASK_CHIEF only behind a mandatory
+ * interactive one (`--yes`/`--json` never substitute — that is the moat),
+ * KEEP refuses. Protections stay enforced in exactly one place — the scan
+ * pipeline; this module only reads the verdict and protections the scan
+ * already recorded.
  */
 
-/** Verdicts trap() will act on in this walking skeleton. */
-const TRAPPABLE_VERDICTS = new Set<FileFinding["verdict"]>(["SAFE", "PROPOSE"]);
+/**
+ * The protection statement an ASK_CHIEF confirmation/refusal must carry
+ * (spec: "states the protection that fired"). An ASK_CHIEF verdict without
+ * fired protections came from weak evidence instead — say that.
+ */
+export function protectionSummary(finding: FileFinding): string {
+  return finding.protections.length > 0 ? finding.protections.join(", ") : "weak evidence only";
+}
 
 /**
  * Find the file finding trap should act on, or refuse. Shared by the engine
@@ -28,8 +37,9 @@ const TRAPPABLE_VERDICTS = new Set<FileFinding["verdict"]>(["SAFE", "PROPOSE"]);
  *
  * Refuses when: no file finding matches `relPath` (a link finding at the
  * same path is not a match — link findings are never trappable, spec), or
- * the finding's verdict isn't SAFE/PROPOSE (KEEP and ASK_CHIEF are out of
- * this ticket's scope).
+ * the verdict is KEEP (the Chief's ruling stands; the remedy is deleting
+ * the keep entry). ASK_CHIEF findings pass through — their mandatory
+ * confirmation is enforced inside `trap()` itself.
  */
 export function findTrappableFinding(
   scanResult: ScanResult,
@@ -56,15 +66,44 @@ export function findTrappableFinding(
     );
   }
 
-  if (!TRAPPABLE_VERDICTS.has(finding.verdict)) {
-    refuse(
-      voice,
-      `That one's ${finding.verdict}, Chief — the mandatory confirmation for it isn't wired up yet.`,
-      `Verdict ${finding.verdict} is not yet supported by "gunk trap".`,
+  return finding;
+}
+
+/**
+ * The git guard (spec "Git semantics"): a status *read*, never a mutation.
+ * A tracked file with uncommitted changes refuses without `force` — trapping
+ * it would make the vault the only holder of unversioned bytes. An untracked
+ * file proceeds, but loudly: git holds no copy at all.
+ */
+async function guardGitState(
+  root: string,
+  relPath: string,
+  voice: Voice,
+  force: boolean,
+  onWarning: ((warning: string) => void) | undefined,
+): Promise<void> {
+  const status = (
+    await runGit(root, ["status", "--porcelain", "--untracked-files=all", "--", relPath])
+  ).trim();
+
+  if (status === "") return; // tracked and clean — HEAD holds these bytes
+
+  if (status.startsWith("??")) {
+    onWarning?.(
+      voice === "professional"
+        ? `Warning: "${relPath}" is untracked — git holds no copy; the vault will hold the only one.`
+        : `Heads up, Chief: git never met "${relPath}" — after this, the vault holds the only copy in existence.`,
     );
+    return;
   }
 
-  return finding;
+  if (!force) {
+    refuse(
+      voice,
+      `"${relPath}" has uncommitted changes, Chief — commit first, or --force if the vault should hold unversioned bytes.`,
+      `"${relPath}" has uncommitted changes (disk differs from HEAD) — commit first, or use --force.`,
+    );
+  }
 }
 
 /** Resolve `trap.vaultRoot` to an absolute path, refusing a vault that resolves inside the repo. */
@@ -139,11 +178,23 @@ export interface TrapOptions {
   batchId?: string;
   /** Clock injection for deterministic tests. */
   now?: () => Date;
+  /**
+   * The Chief personally confirmed this ASK_CHIEF finding through the
+   * mandatory interactive prompt. Only the CLI's interactive flow may set it
+   * — never a flag, never `--yes`, never a `--json` run (spec: no flag
+   * bypasses the moat). Without it, `trap()` refuses ASK_CHIEF outright.
+   */
+  askChiefConfirmed?: boolean;
+  /** Trap a tracked file whose disk content differs from HEAD anyway. */
+  force?: boolean;
+  /** Receives loud non-fatal warnings (e.g. trapping an untracked file). */
+  onWarning?: (warning: string) => void;
 }
 
 /**
  * The engine seam (spec): `trap(repoRoot, path, opts) -> Receipt`. Moves one
- * SAFE- or PROPOSE-verdict file finding from `<repoRoot>/<relPath>` into the
+ * SAFE-, PROPOSE-, or Chief-confirmed ASK_CHIEF-verdict file finding from
+ * `<repoRoot>/<relPath>` into the
  * vault at `<vaultRoot>/traps/<repo-dir-name>/<trap-id>/<relPath>`, and
  * writes the receipt both there (a copy) and at
  * `<repoRoot>/.gunk-buster/receipts/<trapId>.json` (authoritative,
@@ -165,6 +216,17 @@ export async function trap(
   const scanResult = await loadScanResult(root);
   const finding = findTrappableFinding(scanResult, relPath, config.voice);
 
+  // The top of the verdict ladder: ASK_CHIEF is trappable, but only through
+  // the mandatory interactive confirmation — agents must surface these to
+  // the Chief (spec). The refusal states the protection that fired.
+  if (finding.verdict === "ASK_CHIEF" && opts.askChiefConfirmed !== true) {
+    refuse(
+      config.voice,
+      `That one's ASK_CHIEF (${protectionSummary(finding)}) — only your word gets it past me, Chief. Run "gunk trap" interactively; --yes and --json don't count here.`,
+      `"${relPath}" is ASK_CHIEF (${protectionSummary(finding)}) — it requires interactive confirmation; --yes and --json do not apply.`,
+    );
+  }
+
   const currentHash = await currentHashOrRefuse(root, relPath, config.voice);
   if (currentHash !== finding.contentHash) {
     refuse(
@@ -173,6 +235,11 @@ export async function trap(
       `"${relPath}" changed since the scan — re-run "gunk scan".`,
     );
   }
+
+  // After the staleness guard on purpose: a post-scan edit gets the more
+  // actionable "re-scan" refusal; this one catches the file that is dirty
+  // *and* was re-scanned that way (hash matches, bytes still unversioned).
+  await guardGitState(root, relPath, config.voice, opts.force ?? false, opts.onWarning);
 
   const vaultRoot = resolveVaultRoot(root, config);
   const now = (opts.now ?? (() => new Date()))();
