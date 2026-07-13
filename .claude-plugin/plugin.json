@@ -1,0 +1,19 @@
+{
+  "name": "gunk-buster",
+  "description": "Finds and quarantines context gunk — stale, agent-readable repo residue — before AI coding agents consume it.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Gustavo Meilus",
+    "email": "gmeilus@outlook.com"
+  },
+  "skills": [
+    "./.claude/skills/gunk-trap/",
+    "./.claude/skills/gunk-scan/",
+    "./.claude/skills/gunk-radar/",
+    "./.claude/skills/gunk-restore/"
+  ],
+  "agents": [
+    "./.claude/agents/gunk-auditor.md"
+  ],
+  "hooks": "./.claude-plugin/hooks.json"
+}
