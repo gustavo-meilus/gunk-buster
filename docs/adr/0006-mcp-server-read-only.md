@@ -1,0 +1,3 @@
+# MCP server ships read-only — mutation stays CLI/human-only
+
+MVP 3's entire design point is that Chief approval gates every risky action, enforced through interactive TTY prompts or an explicit `--yes` a human types. An MCP server lets an agent call tools mid-conversation with no human reading a confirmation — a materially different trust boundary. MVP 4's MCP server therefore exposes only read-only operations (`scan`, `radar`, `pile`, `report`, `verify`); `trap`, `bust`, `restore`, `ask`, and `radar --fix` stay CLI/human-only until a later spec designs what "Chief approves" means over a non-interactive protocol.

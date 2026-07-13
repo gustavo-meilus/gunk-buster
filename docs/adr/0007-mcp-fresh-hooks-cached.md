@@ -1,0 +1,3 @@
+# MCP tools compute fresh; the edit hook reads persisted state
+
+MVP 4 puts two very different call patterns over the same engine. MCP tools are called explicitly, a handful of times per session, so `scan`/`radar`/`pile`/`report`/`verify` always recompute in-process rather than trusting whatever `.gunk/scan.json`/`radar.json` the CLI last wrote — an agent has no way to know how stale that cache is, and silently returning stale data is worse than the cost of a fresh compute. The `PreToolUse` hook on `Edit`/`Write`, by contrast, fires on every file edit in a session and must stay fast, so it reads the last persisted scan/radar result instead of rescanning, and no-ops silently if none exists — it's an advisory nice-to-have, not a source of truth.
