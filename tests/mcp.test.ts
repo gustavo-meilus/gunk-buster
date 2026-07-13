@@ -5,8 +5,13 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { buildPileResult, pileResultSchema } from "../src/pile.js";
+import { buildFixPlan, radar } from "../src/radar.js";
+import { renderReportMarkdown } from "../src/report.js";
+import { loadReceipts } from "../src/restore.js";
 import { scan } from "../src/scan.js";
-import { scanResultSchema } from "../src/schema.js";
+import { scanResultSchema, verifyResultSchema } from "../src/schema.js";
+import { verify } from "../src/verify.js";
 import { createFixtureRepo, removeDir } from "./helpers/fixture.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -19,7 +24,11 @@ async function connectClient(): Promise<Client> {
   return client;
 }
 
-describe("gunk-mcp — gunk_scan tool (walking skeleton, #27)", () => {
+function expectNoGunkBusterDir(repo: string): void {
+  expect(existsSync(path.join(repo, ".gunk-buster"))).toBe(false);
+}
+
+describe("gunk-mcp — read-only tools (#27, #28)", () => {
   let repo: string;
   let client: Client;
 
@@ -36,26 +45,136 @@ describe("gunk-mcp — gunk_scan tool (walking skeleton, #27)", () => {
     await client?.close();
   });
 
-  it("calls scan() fresh and returns a schema-valid ScanResult, with no .gunk-buster/ file written", async () => {
-    client = await connectClient();
-
-    const response = await client.callTool({ name: "gunk_scan", arguments: { repoRoot: repo } });
-
-    const expected = await scan(repo);
-    const structuredContent = response.structuredContent as Record<string, unknown>;
-    const result = scanResultSchema.parse(structuredContent);
-    expect({ ...result, scannedAt: "<scannedAt>" }).toEqual({
-      ...expected,
-      scannedAt: "<scannedAt>",
-    });
-
-    expect(existsSync(path.join(repo, ".gunk-buster"))).toBe(false);
-  });
-
-  it("lists exactly one tool, gunk_scan", async () => {
+  it("lists all five gunk_* tools", async () => {
     client = await connectClient();
 
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name)).toEqual(["gunk_scan"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "gunk_scan",
+      "gunk_radar",
+      "gunk_pile",
+      "gunk_report",
+      "gunk_verify",
+    ]);
+  });
+
+  describe("gunk_scan", () => {
+    it("calls scan() fresh and returns a schema-valid ScanResult, with no .gunk-buster/ file written", async () => {
+      client = await connectClient();
+
+      const response = await client.callTool({ name: "gunk_scan", arguments: { repoRoot: repo } });
+
+      const expected = await scan(repo);
+      const structuredContent = response.structuredContent as Record<string, unknown>;
+      const result = scanResultSchema.parse(structuredContent);
+      expect({ ...result, scannedAt: "<scannedAt>" }).toEqual({
+        ...expected,
+        scannedAt: "<scannedAt>",
+      });
+
+      expectNoGunkBusterDir(repo);
+    });
+  });
+
+  describe("gunk_radar", () => {
+    it("calls radar() fresh and returns a schema-valid RadarResult, with no .gunk-buster/ file written", async () => {
+      client = await connectClient();
+
+      const response = await client.callTool({ name: "gunk_radar", arguments: { repoRoot: repo } });
+
+      const expected = await radar(repo);
+      const result = response.structuredContent as Record<string, unknown>;
+      expect({ ...result, scannedAt: "<scannedAt>" }).toEqual({
+        ...expected,
+        scannedAt: "<scannedAt>",
+      });
+
+      expectNoGunkBusterDir(repo);
+    });
+
+    it("returns the buildFixPlan() checklist instead of the plain RadarResult when includeFixPlan is true", async () => {
+      const fixtureRepo = await createFixtureRepo("pm-drift-field");
+      try {
+        client = await connectClient();
+
+        const response = await client.callTool({
+          name: "gunk_radar",
+          arguments: { repoRoot: fixtureRepo, includeFixPlan: true },
+        });
+
+        const expected = buildFixPlan(await radar(fixtureRepo));
+        const result = response.structuredContent as Record<string, unknown>;
+        expect(result.items).not.toEqual([]);
+        expect({ ...result, scannedAt: "<scannedAt>" }).toEqual({
+          ...expected,
+          scannedAt: "<scannedAt>",
+        });
+
+        expectNoGunkBusterDir(fixtureRepo);
+      } finally {
+        await removeDir(fixtureRepo);
+      }
+    });
+  });
+
+  describe("gunk_pile", () => {
+    it("calls buildPileResult() over fresh scan/radar/receipts, with no .gunk-buster/ file written", async () => {
+      client = await connectClient();
+
+      const response = await client.callTool({ name: "gunk_pile", arguments: { repoRoot: repo } });
+
+      const scanResult = await scan(repo);
+      const radarResult = await radar(repo);
+      const receipts = await loadReceipts(scanResult.repoRoot);
+      const expected = buildPileResult(scanResult, radarResult, receipts);
+      const structuredContent = response.structuredContent as Record<string, unknown>;
+      const result = pileResultSchema.parse(structuredContent);
+      expect({ ...result, scannedAt: "<scannedAt>", radarScannedAt: "<radarScannedAt>" }).toEqual({
+        ...expected,
+        scannedAt: "<scannedAt>",
+        radarScannedAt: "<radarScannedAt>",
+      });
+
+      expectNoGunkBusterDir(repo);
+    });
+  });
+
+  describe("gunk_report", () => {
+    it("calls renderReportMarkdown() over fresh scan/radar/receipts and returns markdown text, with no .gunk-buster/ file written", async () => {
+      client = await connectClient();
+
+      const response = await client.callTool({ name: "gunk_report", arguments: { repoRoot: repo } });
+
+      const scanResult = await scan(repo);
+      const radarResult = await radar(repo);
+      const receipts = await loadReceipts(scanResult.repoRoot);
+      const expected = renderReportMarkdown(scanResult, radarResult, receipts);
+      const [content] = response.content as Array<{ type: string; text: string }>;
+      const normalizeTimestamps = (markdown: string): string =>
+        markdown.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "<timestamp>");
+      expect(content).toMatchObject({ type: "text" });
+      expect(normalizeTimestamps(content?.text ?? "")).toBe(normalizeTimestamps(expected));
+      expect(response.structuredContent).toBeUndefined();
+
+      expectNoGunkBusterDir(repo);
+    });
+  });
+
+  describe("gunk_verify", () => {
+    it("calls verify() fresh and returns a schema-valid VerifyResult, with no .gunk-buster/ file written", async () => {
+      client = await connectClient();
+
+      const response = await client.callTool({ name: "gunk_verify", arguments: { repoRoot: repo } });
+
+      const expected = await verify(repo);
+      const structuredContent = response.structuredContent as Record<string, unknown>;
+      const result = verifyResultSchema.parse(structuredContent);
+      expect({ ...result, verifiedAt: "<verifiedAt>" }).toEqual({
+        ...expected,
+        verifiedAt: "<verifiedAt>",
+      });
+
+      expectNoGunkBusterDir(repo);
+    });
   });
 });
