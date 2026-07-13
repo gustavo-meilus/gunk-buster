@@ -14,8 +14,8 @@ import { buildPileResult } from "./pile.js";
 import { buildFixPlan, loadRadarResult, persistRadarResult, radar, tryLoadRadarResult } from "./radar.js";
 import { writeReport } from "./report.js";
 import { loadScanResult, persistScanResult, scan } from "./scan.js";
-import type { RadarResult, ScanResult } from "./schema.js";
-import { restore, type RestoreRef } from "./restore.js";
+import type { RadarResult, ScanResult, TrapReceipt } from "./schema.js";
+import { loadReceipts, restore, type RestoreRef } from "./restore.js";
 import { buildBatchId, findTrappableFinding, trap } from "./trap.js";
 import { verify } from "./verify.js";
 import {
@@ -59,18 +59,22 @@ function printJson(document: unknown): void {
  * voice), and load the persisted scan index — never re-scan (#7). Also
  * loads the persisted radar index when one exists (#13) — `undefined` when
  * `gunk radar` has never run here, so pile/report merge it in only when
- * present and stay byte-identical to MVP 1 output otherwise.
+ * present and stay byte-identical to MVP 1 output otherwise — and every trap
+ * receipt on disk (#23), an empty array when `gunk trap`/`bust` has never
+ * run here.
  */
 async function loadViewContext(): Promise<{
   config: GunkConfig;
   scanResult: ScanResult;
   radarResult: RadarResult | undefined;
+  receipts: TrapReceipt[];
 }> {
   const root = await resolveRepoRoot(process.cwd());
   const config = await loadConfig(root);
   const scanResult = await loadScanResult(root);
   const radarResult = await tryLoadRadarResult(root);
-  return { config, scanResult, radarResult };
+  const receipts = await loadReceipts(root);
+  return { config, scanResult, radarResult, receipts };
 }
 
 const program = new Command();
@@ -199,8 +203,8 @@ program
   .description("Show findings grouped by label, from the persisted scan index")
   .option("--json", "print the PileResult document to stdout")
   .action(async (options: { json?: boolean }) => {
-    const { config, scanResult, radarResult } = await loadViewContext();
-    const pile = buildPileResult(scanResult, radarResult);
+    const { config, scanResult, radarResult, receipts } = await loadViewContext();
+    const pile = buildPileResult(scanResult, radarResult, receipts);
 
     if (options.json) {
       printJson(pile);
@@ -217,8 +221,8 @@ program
   )
   .option("--json", "print the ReportResult document to stdout")
   .action(async (options: { json?: boolean }) => {
-    const { config, scanResult, radarResult } = await loadViewContext();
-    const report = await writeReport(scanResult, radarResult);
+    const { config, scanResult, radarResult, receipts } = await loadViewContext();
+    const report = await writeReport(scanResult, radarResult, receipts);
 
     if (options.json) {
       printJson(report);

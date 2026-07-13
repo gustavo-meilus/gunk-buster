@@ -6,6 +6,7 @@ import type {
   Finding,
   LinkFinding,
   RadarResult,
+  TrapReceipt,
 } from "../src/schema.js";
 
 function fileFinding(overrides: Partial<FileFinding> = {}): FileFinding {
@@ -55,6 +56,24 @@ function radarResult(findings: RadarResult["findings"]): RadarResult {
     repoRoot: "/repo",
     counts: { byLabel: {}, byCheck: {} },
     findings,
+  };
+}
+
+function trapReceipt(overrides: Partial<TrapReceipt> = {}): TrapReceipt {
+  return {
+    schemaVersion: 1,
+    trapId: "2026-07-10T02:00:00Z-old-notes-md",
+    batchId: "2026-07-10T02:00:00Z-old-notes-md",
+    status: "trapped",
+    originalPath: "old-notes.md",
+    vaultPath: "../.gunk-buster/traps/repo/2026-07-10T02:00:00Z-old-notes-md/old-notes.md",
+    label: "GHOST",
+    verdict: "SAFE",
+    evidence: [{ rule: "unreferenced", confidence: "STRONG", rationale: "no inbound links" }],
+    contentHash: "sha256:" + "b".repeat(64),
+    trappedAt: "2026-07-10T02:00:00.000Z",
+    restoreCommand: "gunk restore 2026-07-10T02:00:00Z-old-notes-md",
+    ...overrides,
   };
 }
 
@@ -190,5 +209,88 @@ describe("buildPileResult(scan, radar) — merging the radar index in (#13)", ()
     const result = buildPileResult(scan, radar);
     expect(result.groups.map((g) => g.label)).toEqual(["DUMP"]);
     expect(result.radarScannedAt).toBe(radar.scannedAt);
+  });
+});
+
+describe("buildPileResult(scan, radar, receipts) — merging trapped receipts in (#23)", () => {
+  const scan = {
+    schemaVersion: 2 as const,
+    scannedAt: "2026-07-10T00:00:00.000Z",
+    repoRoot: "/repo",
+    counts: { byVerdict: {}, byLabel: {} },
+    findings: [] as Finding[],
+  };
+
+  it("is byte-identical to the no-receipts call when receipts are omitted", () => {
+    const withoutArg = buildPileResult(scan);
+    const withUndefined = buildPileResult(scan, undefined, undefined);
+    expect(withUndefined).toEqual(withoutArg);
+  });
+
+  it("adds a TRAPPED group with original path, label, trapped date, and restore command", () => {
+    const receipt = trapReceipt();
+    const result = buildPileResult(scan, undefined, [receipt]);
+
+    expect(result.groups).toEqual([
+      {
+        label: "TRAPPED",
+        count: 1,
+        verdictCounts: {},
+        findings: [
+          {
+            type: "trapped",
+            path: receipt.originalPath,
+            label: receipt.label,
+            trappedAt: receipt.trappedAt,
+            restoreCommand: receipt.restoreCommand,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("drops a scan finding whose path matches a trapped receipt from its old group — a vaulted file is never shown as a live GHOST", () => {
+    const scanWithGhost = {
+      ...scan,
+      findings: [
+        fileFinding({ path: "old-notes.md", kind: "doc", label: "GHOST", verdict: "PROPOSE" }),
+      ],
+    };
+    const receipt = trapReceipt({ originalPath: "old-notes.md" });
+
+    const result = buildPileResult(scanWithGhost, undefined, [receipt]);
+
+    expect(result.groups.map((g) => g.label)).toEqual(["TRAPPED"]);
+  });
+
+  it("a restored receipt does not render — no TRAPPED group, and its scan finding (if any) is not dropped", () => {
+    const scanWithGhost = {
+      ...scan,
+      findings: [
+        fileFinding({ path: "old-notes.md", kind: "doc", label: "GHOST", verdict: "PROPOSE" }),
+      ],
+    };
+    const receipt = trapReceipt({
+      originalPath: "old-notes.md",
+      status: "restored",
+      restoredAt: "2026-07-10T03:00:00.000Z",
+    });
+
+    const result = buildPileResult(scanWithGhost, undefined, [receipt]);
+
+    expect(result.groups.map((g) => g.label)).toEqual(["GHOST"]);
+  });
+
+  it("trapped rows carry no verdict or evidence", () => {
+    const result = buildPileResult(scan, undefined, [trapReceipt()]);
+    const trappedGroup = result.groups.find((g) => g.label === "TRAPPED");
+    expect(trappedGroup?.findings[0]).not.toHaveProperty("verdict");
+    expect(trappedGroup?.findings[0]).not.toHaveProperty("evidence");
+  });
+
+  it("merges alongside a radar result — BAIT and TRAPPED groups coexist", () => {
+    const radar = radarResult([claimFinding()]);
+    const result = buildPileResult(scan, radar, [trapReceipt()]);
+    expect(result.groups.map((g) => g.label)).toEqual(["BAIT", "TRAPPED"]);
   });
 });

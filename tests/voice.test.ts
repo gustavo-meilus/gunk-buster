@@ -107,6 +107,28 @@ const mergedPileResult: PileResult = {
   ],
 };
 
+const trappedPileResult: PileResult = {
+  schemaVersion: 1,
+  scannedAt: scanResult.scannedAt,
+  repoRoot: scanResult.repoRoot,
+  groups: [
+    {
+      label: "TRAPPED",
+      count: 1,
+      verdictCounts: {},
+      findings: [
+        {
+          type: "trapped",
+          path: "old-notes.md",
+          label: "GHOST",
+          trappedAt: "2026-07-10T02:00:00.000Z",
+          restoreCommand: "gunk restore 2026-07-10T02:00:00Z-old-notes-md",
+        },
+      ],
+    },
+  ],
+};
+
 const emptyFixPlanResult: FixPlanResult = {
   schemaVersion: 1,
   scannedAt: "2026-07-10T00:00:00.000Z",
@@ -215,6 +237,19 @@ describe("voice — Chief default, professional override, persona-free JSON by c
     expect(text).toContain("npm install");
     const claimLine = text.split("\n").find((line) => line.includes("CLAUDE.md:3"));
     expect(claimLine).not.toMatch(/SAFE|PROPOSE|ASK_CHIEF|KEEP/);
+  });
+
+  it("renderPileHuman: renders a trapped row with path, label, trapped date, and restore command — never a verdict", () => {
+    for (const voice of ["chief", "professional"] as const) {
+      const text = renderPileHuman(voice, trappedPileResult);
+      expect(text).toContain("TRAPPED");
+      expect(text).toContain("old-notes.md");
+      expect(text).toContain("GHOST");
+      expect(text).toContain("2026-07-10T02:00:00.000Z");
+      expect(text).toContain("gunk restore 2026-07-10T02:00:00Z-old-notes-md");
+      const trappedLine = text.split("\n").find((line) => line.includes("old-notes.md"));
+      expect(trappedLine).not.toMatch(/SAFE|PROPOSE|ASK_CHIEF|KEEP/);
+    }
   });
 
   it("renderFixPlanHuman: chief voice renders a checklist of suggestion-carrying items", () => {
