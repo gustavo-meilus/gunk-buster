@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { copyFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ import { loadReceipts } from "../src/restore.js";
 import { scan } from "../src/scan.js";
 import { scanResultSchema, verifyResultSchema } from "../src/schema.js";
 import { verify } from "../src/verify.js";
-import { createFixtureRepo, removeDir } from "./helpers/fixture.js";
+import { createFixtureRepo, createTempDir, removeDir } from "./helpers/fixture.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const mcpPath = path.join(packageRoot, "dist", "mcp.js");
@@ -176,5 +177,62 @@ describe("gunk-mcp — read-only tools (#27, #28)", () => {
 
       expectNoGunkBusterDir(repo);
     });
+  });
+});
+
+describe("gunk-mcp — runs from a directory with no node_modules (#36)", () => {
+  let repo: string;
+  let noNodeModulesDir: string;
+  let copiedMcpPath: string;
+  let client: Client;
+
+  beforeAll(async () => {
+    // Rebuilds independently rather than relying on the describe block above
+    // having already run in this file — a copy proves dist/mcp.js resolves
+    // nothing from a node_modules tree, simulating an installed plugin's
+    // cache (which never runs one), regardless of test filtering/ordering.
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+    repo = await createFixtureRepo("clean-repo");
+    noNodeModulesDir = await createTempDir();
+    copiedMcpPath = path.join(noNodeModulesDir, "mcp.js");
+    await copyFile(mcpPath, copiedMcpPath);
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+    await removeDir(noNodeModulesDir);
+  });
+
+  afterEach(async () => {
+    await client?.close();
+  });
+
+  it("all five gunk_* tools are callable end-to-end", async () => {
+    client = new Client({ name: "gunk-mcp-no-node-modules-client", version: "0.0.0" });
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [copiedMcpPath],
+      cwd: noNodeModulesDir,
+    });
+    await client.connect(transport);
+
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "gunk_scan",
+      "gunk_radar",
+      "gunk_pile",
+      "gunk_report",
+      "gunk_verify",
+    ]);
+
+    for (const name of ["gunk_scan", "gunk_radar", "gunk_pile", "gunk_verify"] as const) {
+      const response = await client.callTool({ name, arguments: { repoRoot: repo } });
+      expect(response.isError).not.toBe(true);
+      expect(response.structuredContent).toBeDefined();
+    }
+
+    const reportResponse = await client.callTool({ name: "gunk_report", arguments: { repoRoot: repo } });
+    expect(reportResponse.isError).not.toBe(true);
+    expect(reportResponse.content).toBeDefined();
   });
 });

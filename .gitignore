@@ -1,5 +1,6 @@
 node_modules/
-/dist/
+/dist/*
+!/dist/mcp.js
 /.gunk-buster/
 *.tsbuildinfo
 .claude/worktrees/
