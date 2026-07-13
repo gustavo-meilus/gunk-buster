@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { renderReportMarkdown } from "../src/report.js";
-import type { ClaimFinding, FileFinding, RadarResult, ScanResult } from "../src/schema.js";
+import type {
+  ClaimFinding,
+  FileFinding,
+  RadarResult,
+  ScanResult,
+  TrapReceipt,
+} from "../src/schema.js";
 
 function fileFinding(overrides: Partial<FileFinding> = {}): FileFinding {
   return {
@@ -55,6 +61,24 @@ function radarResult(findings: RadarResult["findings"]): RadarResult {
     repoRoot: "/repo",
     counts: { byLabel: {}, byCheck: {} },
     findings,
+  };
+}
+
+function trapReceipt(overrides: Partial<TrapReceipt> = {}): TrapReceipt {
+  return {
+    schemaVersion: 1,
+    trapId: "2026-07-10T02:00:00Z-old-notes-md",
+    batchId: "2026-07-10T02:00:00Z-old-notes-md",
+    status: "trapped",
+    originalPath: "old-notes.md",
+    vaultPath: "../.gunk-buster/traps/repo/2026-07-10T02:00:00Z-old-notes-md/old-notes.md",
+    label: "GHOST",
+    verdict: "SAFE",
+    evidence: [{ rule: "unreferenced", confidence: "STRONG", rationale: "no inbound links" }],
+    contentHash: "sha256:" + "b".repeat(64),
+    trappedAt: "2026-07-10T02:00:00.000Z",
+    restoreCommand: "gunk restore 2026-07-10T02:00:00Z-old-notes-md",
+    ...overrides,
   };
 }
 
@@ -152,5 +176,56 @@ describe("renderReportMarkdown(scan, radar) — merging the radar index in (#13)
     const scan = scanResult([]);
     const radar = radarResult([claimFinding()]);
     expect(renderReportMarkdown(scan, radar).toLowerCase()).not.toContain("chief");
+  });
+});
+
+describe("renderReportMarkdown(scan, radar, receipts) — merging trapped receipts in (#23)", () => {
+  it("is byte-identical to the no-receipts call when receipts are omitted", () => {
+    const scan = scanResult([fileFinding()]);
+    expect(renderReportMarkdown(scan)).toBe(renderReportMarkdown(scan, undefined, undefined));
+  });
+
+  it("renders a TRAPPED section with original path, label, trapped date, and restore command", () => {
+    const receipt = trapReceipt();
+    const markdown = renderReportMarkdown(scanResult([]), undefined, [receipt]);
+
+    expect(markdown).toContain("TRAPPED");
+    expect(markdown).toContain(receipt.originalPath);
+    expect(markdown).toContain(receipt.label);
+    expect(markdown).toContain(receipt.trappedAt);
+    expect(markdown).toContain(receipt.restoreCommand);
+  });
+
+  it("drops a scan finding whose path matches a trapped receipt from its old section", () => {
+    const scan = scanResult([
+      fileFinding({ path: "old-notes.md", kind: "doc", label: "GHOST", verdict: "PROPOSE" }),
+    ]);
+    const receipt = trapReceipt({ originalPath: "old-notes.md" });
+
+    const markdown = renderReportMarkdown(scan, undefined, [receipt]);
+
+    expect(markdown).not.toContain("## GHOST");
+    expect(markdown).toContain("## TRAPPED");
+  });
+
+  it("a restored receipt does not render — no TRAPPED section, and its scan finding is not dropped", () => {
+    const scan = scanResult([
+      fileFinding({ path: "old-notes.md", kind: "doc", label: "GHOST", verdict: "PROPOSE" }),
+    ]);
+    const receipt = trapReceipt({
+      originalPath: "old-notes.md",
+      status: "restored",
+      restoredAt: "2026-07-10T03:00:00.000Z",
+    });
+
+    const markdown = renderReportMarkdown(scan, undefined, [receipt]);
+
+    expect(markdown).toContain("## GHOST");
+    expect(markdown).not.toContain("TRAPPED");
+  });
+
+  it("carries no persona strings when receipts are merged in", () => {
+    const markdown = renderReportMarkdown(scanResult([]), undefined, [trapReceipt()]);
+    expect(markdown.toLowerCase()).not.toContain("chief");
   });
 });

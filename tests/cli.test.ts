@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { pileResultSchema } from "../src/pile.js";
 import {
   bustResultSchema,
   fixResultSchema,
@@ -579,5 +580,67 @@ describe("gunk verify — CLI smoke test", () => {
     const restoreRun = await runGunk(repo, "restore", receipt.trapId);
     expect(restoreRun.exitCode).toBe(0);
     expect((await runGunk(repo, "verify")).exitCode).toBe(0);
+  });
+});
+
+describe("gunk pile / gunk report — TRAPPED group from receipts (#23, CLI smoke test)", () => {
+  let repo: string;
+  let vaultParent: string;
+
+  beforeAll(async () => {
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+    repo = await createFixtureRepo("orphan-docs", { commitDate: NINETY_DAYS_AGO });
+    vaultParent = await createTempDir();
+    await writeFile(
+      path.join(repo, "gunk.config.json"),
+      JSON.stringify({ trap: { vaultRoot: path.join(vaultParent, "vault") } }),
+    );
+    await runGunk(repo, "scan");
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+    await removeDir(vaultParent);
+  });
+
+  it("the demo: trap a GHOST, pile/report show it under TRAPPED and drop it from GHOST; restoring makes it disappear from TRAPPED entirely", async () => {
+    const trapRun = await runGunk(repo, "trap", "docs/old-plan.md", "--yes", "--json");
+    expect(trapRun.exitCode).toBe(0);
+    const receipt = trapReceiptSchema.parse(JSON.parse(trapRun.stdout));
+
+    const pileRun = await runGunk(repo, "pile", "--json");
+    expect(pileRun.exitCode).toBe(0);
+    const pile = pileResultSchema.parse(JSON.parse(pileRun.stdout));
+    const trappedGroup = pile.groups.find((g) => g.label === "TRAPPED");
+    expect(trappedGroup?.findings).toEqual([
+      {
+        type: "trapped",
+        path: "docs/old-plan.md",
+        label: receipt.label,
+        trappedAt: receipt.trappedAt,
+        restoreCommand: receipt.restoreCommand,
+      },
+    ]);
+    const ghostGroup = pile.groups.find((g) => g.label === "GHOST");
+    expect(ghostGroup?.findings.some((f) => f.path === "docs/old-plan.md")).not.toBe(true);
+
+    const reportRun = await runGunk(repo, "report");
+    expect(reportRun.exitCode).toBe(0);
+    const reportMd = await readFile(path.join(repo, ".gunk-buster", "reports", "report.md"), "utf8");
+    expect(reportMd).toContain("## TRAPPED");
+    expect(reportMd).toContain("docs/old-plan.md");
+    expect(reportMd).toContain(receipt.restoreCommand);
+
+    const restoreRun = await runGunk(repo, "restore", receipt.trapId);
+    expect(restoreRun.exitCode).toBe(0);
+
+    const pileAfterRestore = await runGunk(repo, "pile", "--json");
+    const pileAfter = pileResultSchema.parse(JSON.parse(pileAfterRestore.stdout));
+    expect(pileAfter.groups.some((g) => g.label === "TRAPPED")).toBe(false);
+    // never re-scanned, yet the pre-existing scan finding for this path renders
+    // again — it was only ever filtered while the receipt said "trapped"
+    expect(
+      pileAfter.groups.find((g) => g.label === "GHOST")?.findings.some((f) => f.path === "docs/old-plan.md"),
+    ).toBe(true);
   });
 });

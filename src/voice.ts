@@ -82,9 +82,14 @@ function formatVerdictCounts(counts: Partial<Record<Verdict, number>>): string {
  * One compact line per finding: path, verdict (file findings), and the
  * evidence rationale. Claim findings (BAIT/MOLD) render path, line, and the
  * expected-vs-actual claim — never a trap verdict, since claim findings
- * live outside the verdict lattice (radar spec).
+ * live outside the verdict lattice (radar spec). Trapped rows render path,
+ * the label it was trapped as, trapped date, and restore command — no
+ * evidence, since a receipt's row isn't a live finding (spec "Reporting").
  */
 function formatFinding(finding: PileFinding): string {
+  if (finding.type === "trapped") {
+    return `  ${finding.path} — trapped as ${finding.label} on ${finding.trappedAt} — ${finding.restoreCommand}`;
+  }
   const rationale = finding.evidence.map((e) => e.rationale).join("; ");
   if (finding.type === "file") {
     return `  ${finding.path} — ${finding.verdict} — ${rationale}`;
