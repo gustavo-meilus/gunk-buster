@@ -64,20 +64,8 @@ function findingLine(finding: PileFinding): string[] {
   return lines;
 }
 
-/**
- * Pure render: a ScanResult (plus an optional RadarResult and trap receipts)
- * to markdown. No persona — the report is a data artifact. Omitting `radar`
- * reproduces MVP 1 output byte-for-byte: no radar-scanned line, no
- * claim-finding sections. Omitting `receipts` means no TRAPPED section and
- * no scan findings dropped.
- */
-export function renderReportMarkdown(
-  scan: ScanResult,
-  radar?: RadarResult,
-  receipts?: readonly TrapReceipt[],
-): string {
-  const findings: PileFinding[] = mergeFindings(scan, radar, receipts);
-
+/** Shared by `renderReportMarkdown` and `writeReport` so a merge only ever runs once per call. */
+function renderReportBody(scan: ScanResult, radar: RadarResult | undefined, findings: PileFinding[]): string {
   const lines: string[] = [
     "# Gunk Buster report",
     "",
@@ -106,6 +94,21 @@ export function renderReportMarkdown(
 }
 
 /**
+ * Pure render: a ScanResult (plus an optional RadarResult and trap receipts)
+ * to markdown. No persona — the report is a data artifact. Omitting `radar`
+ * reproduces MVP 1 output byte-for-byte: no radar-scanned line, no
+ * claim-finding sections. Omitting `receipts` means no TRAPPED section and
+ * no scan findings dropped.
+ */
+export function renderReportMarkdown(
+  scan: ScanResult,
+  radar?: RadarResult,
+  receipts?: readonly TrapReceipt[],
+): string {
+  return renderReportBody(scan, radar, mergeFindings(scan, radar, receipts));
+}
+
+/**
  * Write the report into `<repoRoot>/.gunk-buster/reports/report.md`, and
  * return the schema-versioned metadata `gunk report --json` prints. A fixed
  * filename keeps re-running report idempotent: it renders straight from the
@@ -119,10 +122,11 @@ export async function writeReport(
   radar?: RadarResult,
   receipts?: readonly TrapReceipt[],
 ): Promise<ReportResult> {
+  const findings = mergeFindings(scan, radar, receipts);
   const dir = path.join(scan.repoRoot, ".gunk-buster", REPORTS_DIR_NAME);
   await mkdir(dir, { recursive: true });
   const reportPath = path.join(dir, REPORT_FILE_NAME);
-  await writeFile(reportPath, renderReportMarkdown(scan, radar, receipts));
+  await writeFile(reportPath, renderReportBody(scan, radar, findings));
 
   return reportResultSchema.parse({
     schemaVersion: 1,
@@ -130,7 +134,7 @@ export async function writeReport(
     ...(radar ? { radarScannedAt: radar.scannedAt } : {}),
     repoRoot: scan.repoRoot,
     reportPath,
-    findingsCount: mergeFindings(scan, radar, receipts).length,
+    findingsCount: findings.length,
     counts: scan.counts,
   });
 }
