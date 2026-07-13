@@ -5,7 +5,8 @@
   "type": "module",
   "license": "MIT",
   "bin": {
-    "gunk": "./dist/cli.js"
+    "gunk": "./dist/cli.js",
+    "gunk-mcp": "./dist/mcp.js"
   },
   "exports": {
     ".": "./dist/index.js"
@@ -23,6 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "commander": "^15.0.0",
     "ignore": "^7.0.5",
     "remark": "^15.0.1",
