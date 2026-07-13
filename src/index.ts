@@ -42,6 +42,8 @@ export { bust, findSafeFindings } from "./bust.js";
 export type { BustOptions } from "./bust.js";
 export { findAskItems } from "./ask.js";
 export { loadKeeps, writeKeep } from "./keeps.js";
+export { fix } from "./fix.js";
+export type { FixOptions } from "./fix.js";
 export { restore, loadReceipts } from "./restore.js";
 export { verify } from "./verify.js";
 export type { VerifyContext } from "./verify.js";

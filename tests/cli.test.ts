@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   bustResultSchema,
+  fixResultSchema,
   radarResultSchema,
   scanResultSchema,
   trapReceiptSchema,
@@ -142,6 +143,115 @@ describe("gunk radar — CLI smoke test", () => {
     } finally {
       await removeDir(dir);
     }
+  });
+});
+
+describe("gunk radar --fix — CLI smoke test", () => {
+  let repo: string;
+
+  beforeAll(async () => {
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+  });
+
+  afterEach(async () => {
+    await removeDir(repo);
+  });
+
+  it('bare "gunk radar --fix" with no prior "gunk radar" errors ("run gunk radar first") and exits non-zero', async () => {
+    repo = await createFixtureRepo("pm-drift-lockfile");
+
+    const run = await runGunk(repo, "radar", "--fix", "--yes");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr.toLowerCase()).toContain("radar");
+
+    const readme = await readFile(path.join(repo, "README.md"), "utf8");
+    expect(readme).toContain("npm install");
+  });
+
+  it("--yes --json applies the fix from the persisted radar index and exits 0, with no receipts written", async () => {
+    repo = await createFixtureRepo("pm-drift-lockfile");
+    await runGunk(repo, "radar");
+
+    const run = await runGunk(repo, "radar", "--fix", "--yes", "--json");
+    expect(run.exitCode).toBe(0);
+
+    const result = fixResultSchema.parse(JSON.parse(run.stdout));
+    expect(result.applied).toEqual([
+      {
+        path: "README.md",
+        line: 3,
+        check: "package-manager-drift",
+        label: "MOLD",
+        replace: "npm install",
+        with: "pnpm install",
+      },
+    ]);
+    expect(result.skipped).toEqual([]);
+
+    const readme = await readFile(path.join(repo, "README.md"), "utf8");
+    expect(readme).toContain("`pnpm install`");
+    // no receipts — git is the only undo for an edit (spec)
+    expect(existsSync(path.join(repo, ".gunk-buster", "receipts"))).toBe(false);
+  });
+
+  it("under --json without --yes, refuses to act", async () => {
+    repo = await createFixtureRepo("pm-drift-lockfile");
+    await runGunk(repo, "radar");
+
+    const run = await runGunk(repo, "radar", "--fix", "--json");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr).toContain("--yes");
+
+    const readme = await readFile(path.join(repo, "README.md"), "utf8");
+    expect(readme).toContain("npm install");
+  });
+
+  it("interactive [y] applies the fix; declining leaves the file untouched", async () => {
+    repo = await createFixtureRepo("pm-drift-lockfile");
+    await runGunk(repo, "radar");
+
+    const declineRun = await runGunkInteractive(repo, ["radar", "--fix"], ["n"]);
+    expect(declineRun.exitCode).toBe(0);
+    let readme = await readFile(path.join(repo, "README.md"), "utf8");
+    expect(readme).toContain("npm install");
+
+    const acceptRun = await runGunkInteractive(repo, ["radar", "--fix"], ["y"]);
+    expect(acceptRun.exitCode).toBe(0);
+    readme = await readFile(path.join(repo, "README.md"), "utf8");
+    expect(readme).toContain("pnpm install");
+  });
+
+  it("with nothing fixable on the persisted index, prints a human message and exits 0 without prompting", async () => {
+    repo = await createFixtureRepo("clean-repo");
+    await runGunk(repo, "radar");
+
+    const run = await runGunk(repo, "radar", "--fix");
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout.toLowerCase()).toContain("nothing");
+  });
+
+  it("staleness guard: re-running gunk radar after an edit lets --fix skip the now-stale item", async () => {
+    repo = await createFixtureRepo("pm-drift-lockfile");
+    await runGunk(repo, "radar"); // persists the original claim at README.md:3
+
+    // Edit past the recorded claim, but DON'T re-run "gunk radar" — the
+    // persisted index is now stale, which --fix must catch.
+    await writeFile(
+      path.join(repo, "README.md"),
+      "# pm-drift-lockfile fixture\r\n\r\nAlready using pnpm, nothing to see here.\r\n",
+    );
+    execSync('git -c user.name=t -c user.email=t@t.invalid -c commit.gpgsign=false commit -am "edit"', {
+      cwd: repo,
+      stdio: "pipe",
+    });
+
+    const run = await runGunk(repo, "radar", "--fix", "--yes", "--json");
+    expect(run.exitCode).toBe(0);
+
+    const result = fixResultSchema.parse(JSON.parse(run.stdout));
+    expect(result.applied).toEqual([]);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]?.reason.toLowerCase()).toContain("re-run radar");
   });
 });
 

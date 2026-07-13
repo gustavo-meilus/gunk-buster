@@ -1,13 +1,14 @@
 import path from "node:path";
 import type { Voice } from "./config.js";
 import { protectionSummary } from "./trap.js";
-import type { FixPlanResult } from "./radar.js";
+import type { FixPlanItem, FixPlanResult } from "./radar.js";
 import type { PileFinding, PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
 import type { RestoreResult } from "./restore.js";
 import type {
   BustResult,
   FileFinding,
+  FixResult,
   RadarResult,
   ScanResult,
   TrapReceipt,
@@ -413,6 +414,65 @@ export function renderFixPlanHuman(voice: Voice, fixPlan: FixPlanResult): string
   for (const item of fixPlan.items) {
     lines.push(
       `- [ ] ${item.path}:${item.line} — replace \`${item.suggestion.replace}\` with \`${item.suggestion.with}\``,
+    );
+  }
+  return lines.join("\n");
+}
+
+export function renderFixEmptyHuman(voice: Voice): string {
+  return voice === "professional"
+    ? "No suggestion-carrying claim findings. Nothing to fix."
+    : "Chief, nothing on the fix plan — no findings carry a ready-made suggestion.";
+}
+
+/** One mini-diff line for the fix confirmation list (spec: `CLAUDE.md:12 — npm install → pnpm install`). */
+function formatMiniDiff(item: FixPlanItem): string {
+  return `  ${item.path}:${item.line} — ${item.suggestion.replace} → ${item.suggestion.with}`;
+}
+
+/**
+ * `gunk radar --fix`'s single batch confirmation (spec: "every edit as a
+ * mini-diff ... one y/N"). Ends without a newline — it's a prompt, the
+ * answer is typed on the same line.
+ */
+export function renderFixConfirmation(voice: Voice, items: readonly FixPlanItem[]): string {
+  const lines: string[] = [
+    voice === "professional" ? "Fixable findings:" : "Chief, here's what I can fix:",
+  ];
+  for (const item of items) {
+    lines.push(formatMiniDiff(item));
+  }
+  lines.push(
+    voice === "professional"
+      ? `Apply these ${items.length} edits? [y/N] `
+      : `Apply these ${items.length} edits, Chief? [y/N] `,
+  );
+  return lines.join("\n");
+}
+
+/** Human summary after a fix run: every edit applied, every skip (with its guard's reason), then the commit nudge if anything changed. */
+export function renderFixHuman(voice: Voice, result: FixResult): string {
+  const lines: string[] = [];
+
+  for (const item of result.applied) {
+    lines.push(
+      voice === "professional"
+        ? `Fixed: ${item.path}:${item.line} — ${item.replace} → ${item.with}`
+        : `Chief, ${item.path}:${item.line} now says ${item.with} instead of ${item.replace}.`,
+    );
+  }
+  for (const skip of result.skipped) {
+    lines.push(
+      voice === "professional"
+        ? `Skipped ${skip.path}:${skip.line}: ${skip.reason}`
+        : `Left ${skip.path}:${skip.line} alone, Chief — ${skip.reason}`,
+    );
+  }
+  if (result.applied.length > 0) {
+    lines.push(
+      voice === "professional"
+        ? "Commit the edits to make this stick."
+        : "Commit the edits when you get a sec, Chief.",
     );
   }
   return lines.join("\n");
