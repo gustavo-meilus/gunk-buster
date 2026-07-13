@@ -1,0 +1,12 @@
+{
+  "name": "gunk-buster",
+  "owner": {
+    "name": "Gustavo Meilus"
+  },
+  "plugins": [
+    {
+      "name": "gunk-buster",
+      "source": "./"
+    }
+  ]
+}
