@@ -18,6 +18,23 @@ interface CodexPluginManifest {
   mcpServers: string;
 }
 
+async function connectInstalledClient(
+  installedRoot: string,
+  name: string,
+): Promise<{ client: Client; serverArgs: string[] }> {
+  const manifest = JSON.parse(
+    await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
+  ) as CodexPluginManifest;
+  const mcpConfig = JSON.parse(
+    await readFile(path.resolve(installedRoot, manifest.mcpServers), "utf8"),
+  ) as { mcpServers: { "gunk-buster": { command: string; args: string[] } } };
+  const server = mcpConfig.mcpServers["gunk-buster"];
+  const serverArgs = server.args.map((arg) => arg.replace("${PLUGIN_ROOT}", installedRoot));
+  const client = new Client({ name, version: "0.0.0" });
+  await client.connect(new StdioClientTransport({ command: server.command, args: serverArgs }));
+  return { client, serverArgs };
+}
+
 describe("Codex installed bundle contract (#40)", () => {
   let codexHome: string;
   let marketplaceRoot: string;
@@ -126,19 +143,10 @@ describe("Codex installed bundle contract (#40)", () => {
   });
 
   it("starts the bundled MCP server from the public plugin-root path and scans a fixture repo", async () => {
-    const manifest = JSON.parse(
-      await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
-    ) as CodexPluginManifest;
-    const mcpConfig = JSON.parse(
-      await readFile(path.resolve(installedRoot, manifest.mcpServers), "utf8"),
-    ) as { mcpServers: { "gunk-buster": { command: string; args: string[] } } };
-    const server = mcpConfig.mcpServers["gunk-buster"];
-    expect(server.args).toEqual(["${PLUGIN_ROOT}/dist/mcp.js"]);
-    const args = server.args.map((arg) => arg.replace("${PLUGIN_ROOT}", installedRoot));
-    const client = new Client({ name: "gunk-codex-bundle-test", version: "0.0.0" });
+    const { client, serverArgs } = await connectInstalledClient(installedRoot, "gunk-codex-bundle-test");
 
     try {
-      await client.connect(new StdioClientTransport({ command: server.command, args }));
+      expect(serverArgs).toEqual([`${installedRoot}/dist/mcp.js`]);
       const response = await client.callTool({ name: "gunk_scan", arguments: { repoRoot: fixtureRepo } });
       const result = scanResultSchema.parse(response.structuredContent);
       expect(result.findings.some((finding) => finding.type === "file" && finding.path === "docs/old-plan.md")).toBe(
@@ -150,24 +158,16 @@ describe("Codex installed bundle contract (#40)", () => {
   });
 
   it("calls every read-only diagnostic through the installed server without consuming persisted state", async () => {
-    const manifest = JSON.parse(
-      await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
-    ) as CodexPluginManifest;
-    const mcpConfig = JSON.parse(
-      await readFile(path.resolve(installedRoot, manifest.mcpServers), "utf8"),
-    ) as { mcpServers: { "gunk-buster": { command: string; args: string[] } } };
-    const server = mcpConfig.mcpServers["gunk-buster"];
-    const args = server.args.map((arg) => arg.replace("${PLUGIN_ROOT}", installedRoot));
-    const client = new Client({ name: "gunk-codex-diagnostics-test", version: "0.0.0" });
+    const { client } = await connectInstalledClient(installedRoot, "gunk-codex-diagnostics-test");
     const stateDir = path.join(fixtureRepo, ".gunk-buster");
     const scanSentinel = "persisted scan must remain untouched\n";
     const radarSentinel = "persisted radar must remain untouched\n";
     await mkdir(stateDir, { recursive: true });
     await writeFile(path.join(stateDir, "scan.json"), scanSentinel);
     await writeFile(path.join(stateDir, "radar.json"), radarSentinel);
+    await writeFile(path.join(fixtureRepo, "package.json"), '{"packageManager":"pnpm@11.11.0"}\n');
 
     try {
-      await client.connect(new StdioClientTransport({ command: server.command, args }));
       const { tools } = await client.listTools();
       expect(tools.map((tool) => tool.name)).toEqual([
         "gunk_scan",
@@ -177,22 +177,51 @@ describe("Codex installed bundle contract (#40)", () => {
         "gunk_verify",
       ]);
 
-      const scan = await client.callTool({ name: "gunk_scan", arguments: { repoRoot: fixtureRepo } });
-      expect(scanResultSchema.parse(scan.structuredContent).findings).not.toEqual([]);
-
-      const radar = await client.callTool({ name: "gunk_radar", arguments: { repoRoot: fixtureRepo } });
-      radarResultSchema.parse(radar.structuredContent);
-
-      const pile = await client.callTool({ name: "gunk_pile", arguments: { repoRoot: fixtureRepo } });
-      expect(pileResultSchema.parse(pile.structuredContent).groups).not.toEqual([]);
-
-      const report = await client.callTool({ name: "gunk_report", arguments: { repoRoot: fixtureRepo } });
-      expect(report.content).toEqual(
-        expect.arrayContaining([expect.objectContaining({ type: "text", text: expect.stringContaining("Gunk") })]),
+      const firstScan = scanResultSchema.parse(
+        (await client.callTool({ name: "gunk_scan", arguments: { repoRoot: fixtureRepo } })).structuredContent,
       );
 
-      const verify = await client.callTool({ name: "gunk_verify", arguments: { repoRoot: fixtureRepo } });
-      verifyResultSchema.parse(verify.structuredContent);
+      const firstRadar = radarResultSchema.parse(
+        (await client.callTool({ name: "gunk_radar", arguments: { repoRoot: fixtureRepo } })).structuredContent,
+      );
+
+      const firstPile = pileResultSchema.parse(
+        (await client.callTool({ name: "gunk_pile", arguments: { repoRoot: fixtureRepo } })).structuredContent,
+      );
+
+      const firstReport = await client.callTool({ name: "gunk_report", arguments: { repoRoot: fixtureRepo } });
+      const firstReportText = (firstReport.content as Array<{ type: string; text: string }>)[0]?.text;
+
+      const firstVerify = verifyResultSchema.parse(
+        (await client.callTool({ name: "gunk_verify", arguments: { repoRoot: fixtureRepo } })).structuredContent,
+      );
+
+      await writeFile(path.join(fixtureRepo, "CLAUDE.md"), "Run `npm install` before development.\n");
+      await writeFile(path.join(fixtureRepo, "docs", "old-plan.md"), "# Superseded plan, freshly changed\n");
+
+      const secondScan = scanResultSchema.parse(
+        (await client.callTool({ name: "gunk_scan", arguments: { repoRoot: fixtureRepo } })).structuredContent,
+      );
+      expect(secondScan.findings).not.toEqual(firstScan.findings);
+
+      const secondRadar = radarResultSchema.parse(
+        (await client.callTool({ name: "gunk_radar", arguments: { repoRoot: fixtureRepo } })).structuredContent,
+      );
+      expect(secondRadar.findings).not.toEqual(firstRadar.findings);
+
+      const secondPile = pileResultSchema.parse(
+        (await client.callTool({ name: "gunk_pile", arguments: { repoRoot: fixtureRepo } })).structuredContent,
+      );
+      expect(secondPile.groups).not.toEqual(firstPile.groups);
+
+      const secondReport = await client.callTool({ name: "gunk_report", arguments: { repoRoot: fixtureRepo } });
+      const secondReportText = (secondReport.content as Array<{ type: string; text: string }>)[0]?.text;
+      expect(secondReportText).not.toBe(firstReportText);
+
+      const secondVerify = verifyResultSchema.parse(
+        (await client.callTool({ name: "gunk_verify", arguments: { repoRoot: fixtureRepo } })).structuredContent,
+      );
+      expect(secondVerify.gitStatus).not.toEqual(firstVerify.gitStatus);
 
       await expect(readFile(path.join(stateDir, "scan.json"), "utf8")).resolves.toBe(scanSentinel);
       await expect(readFile(path.join(stateDir, "radar.json"), "utf8")).resolves.toBe(radarSentinel);
