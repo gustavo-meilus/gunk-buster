@@ -18,6 +18,10 @@ The safety moat and the first mutation. `gunk trap` moves approved candidates to
 
 Distribution. An MCP server exposes the CLI's operations as deterministic tools; thin skills (gunk-scan, gunk-radar, gunk-trap, gunk-restore) teach agents when to call the engine; plugins ship for Claude Code first, then Codex, then Copilot; subagent profiles are read-only by default; hooks are optional warnings, never load-bearing. The CLI stays the single source of truth — every surface is a shell over it.
 
+## MVP 5 — Codex port
+
+Codex distribution. A repository marketplace installs one plugin across Codex CLI, desktop, and IDE, bundling the four skills, five read-only MCP tools, and the non-blocking edit advisory hook. Portable assets are shared with the Claude Code plugin through platform-neutral directories; platform manifests stay thin. Plugin installation requires no manual MCP configuration, while Chief-approved mutations continue to require the separately installed CLI. Windows 11 is the manually certified MVP platform, and a Codex-specific Context Benchmark is part of completion. Full decision set: [docs/specs/mvp-5-codex-port.md](docs/specs/mvp-5-codex-port.md).
+
 ## Context Benchmark
 
 The honest metric. Instead of estimating token savings, measure them: in a fresh Claude Code session, ask "explain all that this repo contains", record wall-clock time to completion, then run `/context` and record total context tokens used and thinking effort. Run the gunk process (scan → radar → trap). Repeat the identical prompt in a fresh session and record the same metrics. Report the deltas; repeat runs to smooth session variance. This before/after protocol is manual and accompanies every milestone demo from MVP 1 onward.
