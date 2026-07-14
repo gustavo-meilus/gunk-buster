@@ -1,0 +1,23 @@
+{
+  "name": "gunk-buster",
+  "description": "Finds context gunk — stale, agent-readable repo residue — before coding agents consume it.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Gustavo Meilus",
+    "email": "gmeilus@outlook.com"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Gunk Buster",
+    "shortDescription": "Find stale repository context before agents consume it",
+    "longDescription": "Scan repository documentation and agent context for stale residue using Gunk Buster's deterministic read-only tools.",
+    "developerName": "Gustavo Meilus",
+    "category": "Developer Tools",
+    "capabilities": ["Read"],
+    "defaultPrompt": [
+      "Scan this repository for context gunk and summarize the findings."
+    ]
+  }
+}

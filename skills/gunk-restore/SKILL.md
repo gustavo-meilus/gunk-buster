@@ -6,7 +6,7 @@ description: Use when Chief wants a trapped file back — recommends the exact g
 # gunk-restore: CLI-invocation guidance for undoing a trap
 
 `gunk restore` is the **only** way to bring a trapped file back. It is a
-**CLI command run in a terminal/Bash tool, approved by the human Chief** —
+**CLI command run in a terminal, approved by the human Chief** —
 not an MCP tool. There is no `gunk_restore` MCP tool, and none should ever be
 invented or assumed to exist (ADR-0006: the MCP server ships read-only —
 `scan`, `radar`, `pile`, `report`, `verify` only — because `trap`/`bust`/

@@ -7,7 +7,7 @@ import type { FileFinding, ScanResult } from "../src/schema.js";
 import { createTempDir, removeDir } from "./helpers/fixture.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
-const hookPath = path.join(packageRoot, ".claude", "hooks", "pre-edit-warn.mjs");
+const hookPath = path.join(packageRoot, "hooks", "pre-edit-warn.mjs");
 
 function fileFinding(overrides: Partial<FileFinding> = {}): FileFinding {
   return {

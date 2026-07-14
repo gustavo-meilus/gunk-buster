@@ -7,13 +7,14 @@
     "email": "gmeilus@outlook.com"
   },
   "skills": [
-    "./.claude/skills/gunk-trap/",
-    "./.claude/skills/gunk-scan/",
-    "./.claude/skills/gunk-radar/",
-    "./.claude/skills/gunk-restore/"
+    "./skills/gunk-trap/",
+    "./skills/gunk-scan/",
+    "./skills/gunk-radar/",
+    "./skills/gunk-restore/"
   ],
   "agents": [
     "./.claude/agents/gunk-auditor.md"
   ],
+  "mcpServers": "./.mcp.claude.json",
   "hooks": "./.claude-plugin/hooks.json"
 }

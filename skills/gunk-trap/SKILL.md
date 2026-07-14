@@ -6,7 +6,7 @@ description: Use when Chief wants to trap, bust, or ask about stale files (gunk)
 # gunk-trap: CLI-invocation guidance for mutating gunk findings
 
 `gunk trap`, `gunk bust safe`, and `gunk ask` are the **only** ways to act on a
-gunk-buster finding. They are **CLI commands run in a terminal/Bash tool,
+gunk-buster finding. They are **CLI commands run in a terminal,
 approved by the human Chief** — not MCP tools. There is no `gunk_trap`,
 `gunk_bust`, or `gunk_ask` MCP tool, and none should ever be invented or
 assumed to exist (ADR-0006: the MCP server ships read-only — `scan`, `radar`,
