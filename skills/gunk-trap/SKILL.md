@@ -16,6 +16,30 @@ explicit `--yes` a human types). If you find yourself reaching for a tool
 call to trap, bust, or ask on Chief's behalf, stop — suggest the CLI command
 instead.
 
+## Confirm the separately installed CLI prerequisite
+
+Before recommending a mutation command, determine whether `gunk` resolves
+through the environment's normal command lookup. Use the terminal capability
+available on the current platform; do not assume a particular shell. Confirm
+the resolved command by running `gunk --version`.
+
+### CLI available
+
+If `gunk --version` succeeds, recommend the stable `gunk trap ...`,
+`gunk bust safe`, or `gunk ask` command documented below. Never invoke an
+executable through an installation-directory path.
+
+### CLI unavailable
+
+If command lookup or `gunk --version` fails, tell Chief that the separately
+installed prerequisite is missing. Give the documented installation command,
+`npm install --global gunk-buster`, then say to retry `gunk --version`. Do not
+present trap, bust, or ask as currently runnable, and do not install anything
+on Chief's behalf.
+
+Installing the plugin exposes guidance and read-only MCP tools; it does not
+install the mutation CLI or change the Chief-approval boundary.
+
 ## How you get here
 
 You typically arrive at a specific finding by having just seen it via

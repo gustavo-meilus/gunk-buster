@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,20 @@ interface CodexPluginManifest {
   name: string;
   skills: string;
   mcpServers: string;
+}
+
+function guidanceSection(guidance: string, heading: "CLI available" | "CLI unavailable"): string {
+  const match = guidance.match(new RegExp(`### ${heading}\\n\\n([\\s\\S]*?)(?=\\n### |\\n## )`));
+  if (!match?.[1]) throw new Error(`Missing ${heading} guidance`);
+  return match[1];
+}
+
+function cliGuidanceOutcome(guidance: string, lookupPath: string): string {
+  const result = spawnSync("gunk", ["--version"], {
+    env: { ...process.env, PATH: lookupPath },
+    encoding: "utf8",
+  });
+  return guidanceSection(guidance, result.status === 0 ? "CLI available" : "CLI unavailable");
 }
 
 async function connectInstalledClient(
@@ -141,6 +155,50 @@ describe("Codex installed bundle contract (#40)", () => {
     const canonicalRadar = await readFile(path.join(packageRoot, "skills", "gunk-radar", "SKILL.md"), "utf8");
     expect(installedRadar).toBe(canonicalRadar);
   });
+
+  it.each(["gunk-trap", "gunk-restore"])(
+    "exposes the canonical %s mutation guidance through both platform adapters",
+    async (skillName) => {
+      const codex = JSON.parse(
+        await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
+      ) as CodexPluginManifest;
+      const claude = JSON.parse(
+        await readFile(path.join(packageRoot, ".claude-plugin", "plugin.json"), "utf8"),
+      ) as { skills: string[] };
+
+      expect(codex.skills).toBe("./skills/");
+      expect(claude.skills).toContain(`./skills/${skillName}/`);
+      const installedSkill = await readFile(path.join(installedRoot, "skills", skillName, "SKILL.md"), "utf8");
+      const canonicalSkill = await readFile(path.join(packageRoot, "skills", skillName, "SKILL.md"), "utf8");
+      expect(installedSkill).toBe(canonicalSkill);
+    },
+  );
+
+  it.each([
+    ["gunk-trap", "gunk trap"],
+    ["gunk-restore", "gunk restore"],
+    ["gunk-radar", "gunk radar --fix"],
+  ])("%s gives CLI-present and CLI-absent outcomes from isolated command lookup", async (skillName, command) => {
+      const fakeBin = await mkdtemp(path.join(os.tmpdir(), "gunk-cli-guidance-"));
+      const guidance = await readFile(path.join(installedRoot, "skills", skillName, "SKILL.md"), "utf8");
+      const executable = path.join(fakeBin, process.platform === "win32" ? "gunk.exe" : "gunk");
+      await cp(process.execPath, executable);
+      if (process.platform !== "win32") await chmod(executable, 0o755);
+
+      try {
+        const available = cliGuidanceOutcome(guidance, fakeBin);
+        expect(available).toContain(command);
+        expect(available).not.toContain("npm install");
+
+        const unavailable = cliGuidanceOutcome(guidance, path.join(fakeBin, "missing"));
+        expect(unavailable).toMatch(/separately\s+installed prerequisite/);
+        expect(unavailable).toContain("`npm install --global gunk-buster`");
+        expect(unavailable).not.toContain(command);
+        expect(guidance).not.toMatch(/Bash|PLUGIN_ROOT|plugin.cache|plugin-cache/i);
+      } finally {
+        await rm(fakeBin, { recursive: true, force: true });
+      }
+    });
 
   it("starts the bundled MCP server from the public plugin-root path and scans a fixture repo", async () => {
     const { client, serverArgs } = await connectInstalledClient(installedRoot, "gunk-codex-bundle-test");

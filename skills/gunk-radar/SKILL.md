@@ -34,9 +34,25 @@ trap/bust/ask (see the `gunk-trap` skill): the MCP server ships read-only,
 and the only way to act on a suggestion-carrying claim finding is the CLI,
 run by Chief:
 
+Before recommending the fix, determine whether `gunk` resolves through the
+environment's normal command lookup. Use the terminal capability available on
+the current platform; do not assume a particular shell. Confirm it with
+`gunk --version`.
+
+### CLI available
+
+If `gunk --version` succeeds, use only the stable command:
+
 ```
 gunk radar --fix
 ```
+
+### CLI unavailable
+
+If command lookup or `gunk --version` fails, tell Chief that the separately
+installed prerequisite is missing. Provide `npm install --global gunk-buster`
+and say to retry `gunk --version`; do not install it or present the fix as
+currently runnable.
 
 This applies every suggestion-carrying claim finding behind one Chief
 confirmation (or `--yes` to pre-approve it), then auto-runs verify. `--force`

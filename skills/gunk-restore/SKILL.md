@@ -14,6 +14,30 @@ invented or assumed to exist (ADR-0006: the MCP server ships read-only —
 yourself reaching for a tool call to restore on Chief's behalf, stop —
 suggest the CLI command instead.
 
+## Confirm the separately installed CLI prerequisite
+
+Before recommending a restore command, determine whether `gunk` resolves
+through the environment's normal command lookup. Use the terminal capability
+available on the current platform; do not assume a particular shell. Confirm
+the resolved command by running `gunk --version`.
+
+### CLI available
+
+If `gunk --version` succeeds, recommend the stable `gunk restore ...` command
+documented below. Never invoke an executable through an installation-directory
+path.
+
+### CLI unavailable
+
+If command lookup or `gunk --version` fails, tell Chief that the separately
+installed prerequisite is missing. Give the documented installation command,
+`npm install --global gunk-buster`, then say to retry `gunk --version`. Do not
+present restore as currently runnable, and do not install anything on Chief's
+behalf.
+
+Installing the plugin exposes guidance and read-only MCP tools; it does not
+install the mutation CLI or change the Chief-approval boundary.
+
 Restore is byte-identical recovery of a trapped file from its receipt (the
 vault keeps its own copy; nothing is removed from the vault).
 
