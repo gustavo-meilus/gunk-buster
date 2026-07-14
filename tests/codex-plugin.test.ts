@@ -16,6 +16,7 @@ interface CodexPluginManifest {
   name: string;
   skills: string;
   mcpServers: string;
+  hooks: string;
 }
 
 function guidanceSection(guidance: string, heading: "CLI available" | "CLI unavailable"): string {
@@ -105,6 +106,28 @@ describe("Codex installed bundle contract (#40)", () => {
       expect.objectContaining({
         name: "gunk-buster",
         transport: expect.objectContaining({ args: ["${PLUGIN_ROOT}/dist/mcp.js"] }),
+      }),
+    );
+  });
+
+  it("exposes the stale-target advisory through Codex plugin lifecycle wiring", async () => {
+    const manifest = JSON.parse(
+      await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
+    ) as CodexPluginManifest;
+    expect(manifest.hooks).toBe("./hooks/hooks.json");
+
+    const hooks = JSON.parse(await readFile(path.resolve(installedRoot, manifest.hooks), "utf8")) as {
+      hooks: { PreToolUse: Array<{ matcher: string; hooks: Array<{ type: string; command: string }> }> };
+    };
+    expect(hooks.hooks.PreToolUse).toContainEqual(
+      expect.objectContaining({
+        matcher: "apply_patch",
+        hooks: [
+          expect.objectContaining({
+            type: "command",
+            command: 'node "${PLUGIN_ROOT}/hooks/pre-edit-warn.mjs"',
+          }),
+        ],
       }),
     );
   });

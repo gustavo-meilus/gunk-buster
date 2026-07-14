@@ -68,6 +68,23 @@ async function runHook(cwd: string, toolName: string, filePath: string): Promise
   );
 }
 
+async function runCodexHook(cwd: string, command: string): Promise<HookRun> {
+  return runHookRaw(
+    JSON.stringify({
+      cwd,
+      hook_event_name: "PreToolUse",
+      model: "gpt-5",
+      permission_mode: "default",
+      session_id: "test-session",
+      tool_name: "apply_patch",
+      tool_input: { command },
+      tool_use_id: "call-1",
+      transcript_path: null,
+      turn_id: "turn-1",
+    }),
+  );
+}
+
 async function writeScan(repo: string, result: ScanResult): Promise<void> {
   const dir = path.join(repo, ".gunk-buster");
   await mkdir(dir, { recursive: true });
@@ -109,6 +126,39 @@ describe("pre-edit-warn hook", () => {
     expect(relicResult.stdout).toContain("RELIC");
     expect(dumpResult.exitCode).toBe(0);
     expect(dumpResult.stdout).toContain("DUMP");
+  });
+
+  it.each([
+    ["GHOST", "docs/legacy.md"],
+    ["RELIC", "docs/migration.md"],
+    ["DUMP", "dist/bundle.js"],
+  ] as const)("warns for a persisted %s target in Codex apply_patch input", async (label, target) => {
+    repo = await createTempDir();
+    await writeScan(repo, scanResult([fileFinding({ path: target, label })]));
+
+    const result = await runCodexHook(
+      repo,
+      `*** Begin Patch\n*** Update File: ${target}\n@@\n-old\n+new\n*** End Patch`,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(label);
+  });
+
+  it.each([
+    ["POSIX", "docs/legacy.md"],
+    ["Windows", "docs\\legacy.md"],
+  ])("resolves %s target paths to the persisted repo-relative finding", async (_platform, target) => {
+    repo = await createTempDir();
+    await writeScan(repo, scanResult([fileFinding({ path: "docs/legacy.md", label: "GHOST" })]));
+
+    const result = await runCodexHook(
+      repo,
+      `*** Begin Patch\n*** Update File: ${target}\n@@\n-old\n+new\n*** End Patch`,
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("GHOST");
   });
 
   it("stays silent when the target file has no finding (healthy / LIVE)", async () => {
@@ -158,6 +208,20 @@ describe("pre-edit-warn hook", () => {
         tool_input: {},
       }),
     );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it.each([
+    ["unsupported label", scanResult([fileFinding({ label: "ECHO" })]), "apply_patch", { command: "*** Begin Patch\n*** Update File: src/legacy.ts\n*** End Patch" }],
+    ["unrelated tool", scanResult([fileFinding()]), "shell_command", { command: "echo hi" }],
+    ["malformed Codex input", scanResult([fileFinding()]), "apply_patch", { command: 42 }],
+  ])("stays silent for %s", async (_case, scan, toolName, toolInput) => {
+    repo = await createTempDir();
+    await writeScan(repo, scan);
+
+    const result = await runHookRaw(JSON.stringify({ cwd: repo, tool_name: toolName, tool_input: toolInput }));
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe("");

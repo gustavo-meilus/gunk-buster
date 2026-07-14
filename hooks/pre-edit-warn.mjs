@@ -1,14 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * PreToolUse advisory hook for Edit/Write (MVP4-T4, docs/adr/0007-mcp-fresh-hooks-cached.md):
- * warns when the file about to be edited was labeled stale as of the last
- * persisted `gunk scan`. Reads only the cached .gunk-buster/scan.json —
- * never triggers a rescan — and always exits 0, since an advisory must never
- * block the edit it's warning about. radar.json is not read: its claim
- * findings carry the BAIT/MOLD label set (src/schema.ts CLAIM_LABELS), which
- * is disjoint from the GHOST/RELIC/DUMP file-finding labels this hook warns
- * on, so it has nothing this hook's one warn condition could use.
+ * Shared PreToolUse advisory for Claude Edit/Write and Codex apply_patch.
+ * Reads only the persisted scan — never scans — and always exits successfully.
  */
 
 import { readFile } from "node:fs/promises";
@@ -23,8 +17,30 @@ async function readStdin() {
 }
 
 function toRepoRelativePath(repoRoot, filePath) {
-  const absolute = path.isAbsolute(filePath) ? filePath : path.resolve(repoRoot, filePath);
-  return path.relative(repoRoot, absolute).split(path.sep).join("/");
+  const portableFilePath = filePath.replaceAll("\\", "/");
+  const portableRepoRoot = repoRoot.replaceAll("\\", "/").replace(/\/$/, "");
+  const compareFilePath = portableFilePath.toLowerCase();
+  const compareRepoRoot = portableRepoRoot.toLowerCase();
+
+  if (compareFilePath === compareRepoRoot) return "";
+  if (compareFilePath.startsWith(`${compareRepoRoot}/`)) {
+    return portableFilePath.slice(portableRepoRoot.length + 1);
+  }
+  if (path.isAbsolute(filePath)) {
+    return path.relative(repoRoot, filePath).split(path.sep).join("/");
+  }
+  return portableFilePath.replace(/^\.\//, "");
+}
+
+function targetPaths(input) {
+  if (input.tool_name === "Edit" || input.tool_name === "Write") {
+    const filePath = input.tool_input?.file_path;
+    return typeof filePath === "string" && filePath.length > 0 ? [filePath] : [];
+  }
+  if (input.tool_name !== "apply_patch") return [];
+  const patchText = input.tool_input?.command;
+  if (typeof patchText !== "string") return [];
+  return [...patchText.matchAll(/^\*\*\* (?:Update|Delete) File: (.+)$/gm)].map((match) => match[1]);
 }
 
 async function main() {
@@ -35,30 +51,30 @@ async function main() {
     return;
   }
 
-  if (input.tool_name !== "Edit" && input.tool_name !== "Write") return;
-  const filePath = input.tool_input?.file_path;
-  if (typeof filePath !== "string" || filePath.length === 0) return;
+  const filePaths = targetPaths(input);
+  if (filePaths.length === 0) return;
 
   const repoRoot = typeof input.cwd === "string" && input.cwd.length > 0 ? input.cwd : process.cwd();
-  const scanPath = path.join(repoRoot, ".gunk-buster", "scan.json");
-
   let scan;
   try {
-    scan = JSON.parse(await readFile(scanPath, "utf8"));
+    scan = JSON.parse(await readFile(path.join(repoRoot, ".gunk-buster", "scan.json"), "utf8"));
   } catch {
     return;
   }
   if (!Array.isArray(scan?.findings)) return;
 
-  const targetPath = toRepoRelativePath(repoRoot, filePath);
-  const finding = scan.findings.find(
-    (f) => f?.type === "file" && f?.path === targetPath && STALE_LABELS.has(f?.label),
-  );
-  if (!finding) return;
-
-  console.log(
-    `heads up: gunk-buster flagged this file as stale (${finding.label}) as of the last scan — verify before relying on it`,
-  );
+  for (const filePath of filePaths) {
+    const targetPath = toRepoRelativePath(repoRoot, filePath);
+    const finding = scan.findings.find(
+      (candidate) =>
+        candidate?.type === "file" && candidate?.path === targetPath && STALE_LABELS.has(candidate?.label),
+    );
+    if (finding) {
+      console.log(
+        `heads up: gunk-buster flagged ${targetPath} as stale (${finding.label}) as of the last scan — verify before relying on it`,
+      );
+    }
+  }
 }
 
 main().catch(() => {});
