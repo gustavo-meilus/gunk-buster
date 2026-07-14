@@ -1,12 +1,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { execFileSync } from "node:child_process";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { scanResultSchema } from "../src/schema.js";
+import { pileResultSchema } from "../src/pile.js";
+import { radarResultSchema, scanResultSchema, verifyResultSchema } from "../src/schema.js";
 import { createFixtureRepo, removeDir } from "./helpers/fixture.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -109,6 +110,21 @@ describe("Codex installed bundle contract (#40)", () => {
     }
   });
 
+  it("exposes the canonical gunk-radar skill through both platform adapters", async () => {
+    const codex = JSON.parse(
+      await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
+    ) as CodexPluginManifest;
+    const claude = JSON.parse(
+      await readFile(path.join(packageRoot, ".claude-plugin", "plugin.json"), "utf8"),
+    ) as { skills: string[] };
+
+    expect(codex.skills).toBe("./skills/");
+    expect(claude.skills).toContain("./skills/gunk-radar/");
+    const installedRadar = await readFile(path.join(installedRoot, "skills", "gunk-radar", "SKILL.md"), "utf8");
+    const canonicalRadar = await readFile(path.join(packageRoot, "skills", "gunk-radar", "SKILL.md"), "utf8");
+    expect(installedRadar).toBe(canonicalRadar);
+  });
+
   it("starts the bundled MCP server from the public plugin-root path and scans a fixture repo", async () => {
     const manifest = JSON.parse(
       await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
@@ -128,6 +144,58 @@ describe("Codex installed bundle contract (#40)", () => {
       expect(result.findings.some((finding) => finding.type === "file" && finding.path === "docs/old-plan.md")).toBe(
         true,
       );
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("calls every read-only diagnostic through the installed server without consuming persisted state", async () => {
+    const manifest = JSON.parse(
+      await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
+    ) as CodexPluginManifest;
+    const mcpConfig = JSON.parse(
+      await readFile(path.resolve(installedRoot, manifest.mcpServers), "utf8"),
+    ) as { mcpServers: { "gunk-buster": { command: string; args: string[] } } };
+    const server = mcpConfig.mcpServers["gunk-buster"];
+    const args = server.args.map((arg) => arg.replace("${PLUGIN_ROOT}", installedRoot));
+    const client = new Client({ name: "gunk-codex-diagnostics-test", version: "0.0.0" });
+    const stateDir = path.join(fixtureRepo, ".gunk-buster");
+    const scanSentinel = "persisted scan must remain untouched\n";
+    const radarSentinel = "persisted radar must remain untouched\n";
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(path.join(stateDir, "scan.json"), scanSentinel);
+    await writeFile(path.join(stateDir, "radar.json"), radarSentinel);
+
+    try {
+      await client.connect(new StdioClientTransport({ command: server.command, args }));
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).toEqual([
+        "gunk_scan",
+        "gunk_radar",
+        "gunk_pile",
+        "gunk_report",
+        "gunk_verify",
+      ]);
+
+      const scan = await client.callTool({ name: "gunk_scan", arguments: { repoRoot: fixtureRepo } });
+      expect(scanResultSchema.parse(scan.structuredContent).findings).not.toEqual([]);
+
+      const radar = await client.callTool({ name: "gunk_radar", arguments: { repoRoot: fixtureRepo } });
+      radarResultSchema.parse(radar.structuredContent);
+
+      const pile = await client.callTool({ name: "gunk_pile", arguments: { repoRoot: fixtureRepo } });
+      expect(pileResultSchema.parse(pile.structuredContent).groups).not.toEqual([]);
+
+      const report = await client.callTool({ name: "gunk_report", arguments: { repoRoot: fixtureRepo } });
+      expect(report.content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: "text", text: expect.stringContaining("Gunk") })]),
+      );
+
+      const verify = await client.callTool({ name: "gunk_verify", arguments: { repoRoot: fixtureRepo } });
+      verifyResultSchema.parse(verify.structuredContent);
+
+      await expect(readFile(path.join(stateDir, "scan.json"), "utf8")).resolves.toBe(scanSentinel);
+      await expect(readFile(path.join(stateDir, "radar.json"), "utf8")).resolves.toBe(radarSentinel);
     } finally {
       await client.close();
     }
