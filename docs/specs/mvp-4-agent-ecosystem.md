@@ -11,7 +11,7 @@ Distribution: an MCP server, four skills, and a Claude Code plugin bundling both
 | `gunk-radar` skill | Teaches semantic-claim-audit judgment via the `radar` tool; teaches when to suggest CLI-only `gunk radar --fix` |
 | `gunk-trap` skill | CLI-invocation guidance for `trap`, `bust safe`, `ask` — no MCP tools, these are human-approved mutations |
 | `gunk-restore` skill | CLI-invocation guidance for `restore`; teaches running the `verify` tool afterward |
-| `gunk-auditor` subagent | Structurally read-only: `Read`/`Grep`/`Glob` + the 5 MCP tools, no `Bash`/`Edit`/`Write` |
+| `gunk-auditor` subagent | Prompt-level read-only audit/report profile; its requested tool allowlist is not a security boundary in plugin-loaded Claude Code agents (see #37) |
 | Edit/Write hook | Non-blocking `PreToolUse` warning when the target file is flagged stale |
 | Claude Code plugin | Bundles all of the above, manifest lives in this repo |
 
@@ -56,7 +56,7 @@ Four skills, matching ROADMAP's named set exactly — no more, no fewer:
 
 ## Subagent
 
-`gunk-auditor`: tool allowlist is exactly `Read`, `Grep`, `Glob`, plus the 5 MCP tools. No `Bash`, no `Edit`/`Write`. This makes "read-only" a structural guarantee, not a convention — this subagent cannot invoke a mutating gunk command by any path, including shelling out. An agent that needs to *suggest* `trap`/`restore` invocations is the main agent's job, per the `gunk-trap`/`gunk-restore` skills — not this subagent's.
+`gunk-auditor` requests a tool allowlist of exactly `Read`, `Grep`, `Glob`, plus the 5 MCP tools, and its prompt forbids `Bash`, `Edit`, and `Write`. In plugin-loaded Claude Code agents that allowlist is not currently enforced: #37 records that the auditor could still call mutating tools. Its read-only behavior is therefore a prompt-level contract, not a structural security boundary, until the upstream platform limitation is resolved. The five MCP tools themselves remain structurally non-mutating under ADR-0006. An agent that needs to *suggest* `trap`/`restore` invocations is the main agent's job, per the `gunk-trap`/`gunk-restore` skills — not this subagent's.
 
 ## Hook
 
