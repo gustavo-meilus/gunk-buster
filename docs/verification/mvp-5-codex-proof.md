@@ -1,6 +1,6 @@
 # MVP 5 Codex proof record
 
-Status: **incomplete**. The automated installed-bundle contract and the Codex CLI path are evidenced below. The Codex desktop and IDE fresh-session smoke tests, and the Context Benchmark, still require an interactive run and must not be inferred from automated tests.
+Status: **incomplete**. The automated installed-bundle contract and the Codex CLI path are evidenced below. The Codex desktop and IDE fresh-session smoke tests, and the final shipped pre-plugin/post-plugin Context Benchmark, still require interactive runs and must not be inferred from automated tests.
 
 ## Certification scope
 
@@ -112,6 +112,21 @@ After marketplace refresh and reinstall, fresh Codex CLI 0.144.4 sessions expose
 | `gunk-radar` | `019f6644-7ec3-7420-b9b1-2e4722b52442` | not recorded | 28.1K used / 258K | Passed | Codex called `gunk_radar` directly, including a dry-run fix-plan request. It reported 111 dead-path claims (9 BAIT, 102 MOLD), an empty mechanical fix plan, and no file modifications. The absent global CLI affected only optional CLI-based mutation guidance, not the bundled read-only diagnostic. |
 
 The explicit Codex CLI scan and radar skill smoke tests now pass on version 0.1.1. The benchmark's existing post-plugin run remains evidence for the broken 0.1.0 behavior and must be repeated against 0.1.1 before reporting the final shipped pre/post comparison.
+
+### Supplemental context-cleanup experiments
+
+Repeated CLI experiments also measured repository explanation behavior before
+and after context-surface cleanup. The largest completed matrix used the messy
+Dominus Pax repository (338 scan findings and 505 Radar findings) and recorded
+16 successful Luna sessions across low, medium, and high effort. Results varied
+by effort: low and medium reduced median reasoning, medium reduced wall time,
+and high effort regressed substantially. See
+[context-cleanup-benchmarks.md](context-cleanup-benchmarks.md) for raw runs,
+medians, limitations, and the earlier AIBoarding and Superpipelines evidence.
+
+These experiments test context filtering, not plugin activation. They did not
+record automatic unnamed `gunk-scan` activation and therefore do not satisfy the
+remaining MVP 5 Context Benchmark acceptance criterion.
 
 ## Installation guidance under test
 
