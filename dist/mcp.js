@@ -31500,7 +31500,7 @@ var StdioServerTransport = class {
 // package.json
 var package_default = {
   name: "gunk-buster",
-  version: "0.1.0",
+  version: "0.1.1",
   description: "Finds and quarantines context gunk \u2014 stale, agent-readable repo residue \u2014 before AI coding agents consume it.",
   type: "module",
   license: "MIT",

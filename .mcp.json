@@ -2,7 +2,8 @@
   "mcpServers": {
     "gunk-buster": {
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/dist/mcp.js"]
+      "args": ["./dist/mcp.js"],
+      "cwd": "."
     }
   }
 }

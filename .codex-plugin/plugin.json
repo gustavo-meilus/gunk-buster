@@ -1,7 +1,7 @@
 {
   "name": "gunk-buster",
   "description": "Finds context gunk — stale, agent-readable repo residue — before coding agents consume it.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "Gustavo Meilus",
     "email": "gmeilus@outlook.com"

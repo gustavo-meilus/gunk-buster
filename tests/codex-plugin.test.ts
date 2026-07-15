@@ -42,12 +42,17 @@ async function connectInstalledClient(
   ) as CodexPluginManifest;
   const mcpConfig = JSON.parse(
     await readFile(path.resolve(installedRoot, manifest.mcpServers), "utf8"),
-  ) as { mcpServers: { "gunk-buster": { command: string; args: string[] } } };
+  ) as { mcpServers: { "gunk-buster": { command: string; args: string[]; cwd?: string } } };
   const server = mcpConfig.mcpServers["gunk-buster"];
-  const serverArgs = server.args.map((arg) => arg.replace("${PLUGIN_ROOT}", installedRoot));
   const client = new Client({ name, version: "0.0.0" });
-  await client.connect(new StdioClientTransport({ command: server.command, args: serverArgs }));
-  return { client, serverArgs };
+  await client.connect(
+    new StdioClientTransport({
+      command: server.command,
+      args: server.args,
+      ...(server.cwd ? { cwd: path.resolve(installedRoot, server.cwd) } : {}),
+    }),
+  );
+  return { client, serverArgs: server.args };
 }
 
 describe("Codex installed bundle contract (#40)", () => {
@@ -101,13 +106,10 @@ describe("Codex installed bundle contract (#40)", () => {
         env: { ...process.env, CODEX_HOME: codexHome },
         encoding: "utf8",
       }),
-    ) as Array<{ name: string; transport: { args: string[] } }>;
-    expect(servers).toContainEqual(
-      expect.objectContaining({
-        name: "gunk-buster",
-        transport: expect.objectContaining({ args: ["${PLUGIN_ROOT}/dist/mcp.js"] }),
-      }),
-    );
+    ) as Array<{ name: string; transport: { args: string[]; cwd: string | null } }>;
+    const server = servers.find((candidate) => candidate.name === "gunk-buster");
+    expect(server?.transport.args).toEqual(["./dist/mcp.js"]);
+    expect(path.resolve(server?.transport.cwd ?? "")).toBe(path.resolve(installedRoot));
   });
 
   it("exposes the stale-target advisory through Codex plugin lifecycle wiring", async () => {
@@ -227,7 +229,7 @@ describe("Codex installed bundle contract (#40)", () => {
     const { client, serverArgs } = await connectInstalledClient(installedRoot, "gunk-codex-bundle-test");
 
     try {
-      expect(serverArgs).toEqual([`${installedRoot}/dist/mcp.js`]);
+      expect(serverArgs).toEqual(["./dist/mcp.js"]);
       const response = await client.callTool({ name: "gunk_scan", arguments: { repoRoot: fixtureRepo } });
       const result = scanResultSchema.parse(response.structuredContent);
       expect(result.findings.some((finding) => finding.type === "file" && finding.path === "docs/old-plan.md")).toBe(
@@ -313,7 +315,12 @@ describe("Codex installed bundle contract (#40)", () => {
 
   it("keeps the public plugin-root asset path portable across POSIX and Windows hosts", async () => {
     const config = await readFile(path.join(installedRoot, ".mcp.json"), "utf8");
-    expect(JSON.parse(config).mcpServers["gunk-buster"].args).toEqual(["${PLUGIN_ROOT}/dist/mcp.js"]);
+    expect(JSON.parse(config).mcpServers["gunk-buster"]).toMatchObject({
+      command: "node",
+      args: ["./dist/mcp.js"],
+      cwd: ".",
+    });
+    expect(config).not.toContain("PLUGIN_ROOT");
     expect(path.posix.join("/opt/gunk-buster", "dist/mcp.js")).toBe("/opt/gunk-buster/dist/mcp.js");
     expect(path.win32.join("C:\\plugins\\gunk-buster", "dist/mcp.js")).toBe(
       "C:\\plugins\\gunk-buster\\dist\\mcp.js",
