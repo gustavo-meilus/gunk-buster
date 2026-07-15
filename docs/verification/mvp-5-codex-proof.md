@@ -102,6 +102,17 @@ Confirmed root cause: Codex registers the plugin MCP argument literally as `${PL
 
 Resolution: version 0.1.1 adopts the official Codex plugin pattern, launching `node ./dist/mcp.js` with `cwd` set to the installed plugin root (`.`). The installed-bundle contract no longer performs placeholder substitution and instead launches from the declared working directory.
 
+#### Successful version 0.1.1 retest
+
+After marketplace refresh and reinstall, fresh Codex CLI 0.144.4 sessions exposed and invoked the plugin-managed MCP tools normally. No plugin-cache inspection, manual JSON-RPC client, or global `gunk` CLI was needed for the read-only diagnostics.
+
+| Skill | Session | Wall-clock time | Context usage | Canonical MCP invocation | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| `gunk-scan` | `019f6643-6a39-7ff3-9be0-ca129e191990` | not recorded | 40.3K used / 258K | Passed | Codex called `gunk_scan`, `gunk_pile`, and `gunk_report` directly. It reported 23 structural findings and 134 combined scan/radar findings, and stated that no files were modified. |
+| `gunk-radar` | `019f6644-7ec3-7420-b9b1-2e4722b52442` | not recorded | 28.1K used / 258K | Passed | Codex called `gunk_radar` directly, including a dry-run fix-plan request. It reported 111 dead-path claims (9 BAIT, 102 MOLD), an empty mechanical fix plan, and no file modifications. The absent global CLI affected only optional CLI-based mutation guidance, not the bundled read-only diagnostic. |
+
+The explicit Codex CLI scan and radar skill smoke tests now pass on version 0.1.1. The benchmark's existing post-plugin run remains evidence for the broken 0.1.0 behavior and must be repeated against 0.1.1 before reporting the final shipped pre/post comparison.
+
 ## Installation guidance under test
 
 The supported local path is:
