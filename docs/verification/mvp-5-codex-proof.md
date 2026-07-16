@@ -1,6 +1,6 @@
 # MVP 5 Codex proof record
 
-Status: **incomplete**. The automated installed-bundle contract, the Codex CLI path, and the Codex desktop smoke lifecycle are evidenced below; the IDE lifecycle is waived by maintainer decision. The remaining gap is the final shipped pre-plugin/post-plugin Context Benchmark on version 0.1.1, which requires interactive runs and must not be inferred from automated tests.
+Status: **evidenced on Codex CLI and Codex desktop**. The automated installed-bundle contract, the Codex CLI path, the Codex desktop smoke lifecycle, and the shipped pre-plugin/post-plugin Context Benchmark on version 0.1.1 (runs 1 and 2b) are evidenced below. The IDE lifecycle is waived by maintainer decision. The benchmark establishes that the plugin activates automatically on an unnamed prompt; it is a single-run functional check and deliberately makes no performance claim. Desktop benchmark rows 3-4 remain open pending a maintainer decision, since desktop sessions consume the same account quota and expose no token telemetry.
 
 ## Certification scope
 
@@ -39,7 +39,7 @@ Each surface requires a fresh session and the same lifecycle: add the repository
 | Codex desktop app | Passed | Fresh desktop tasks against `aiboarding` with plugin 0.1.1, run 2026-07-16: (1) the unnamed prompt "check this repo for stale context" activated the gunk workflow (1m 32s) and the tool trace shows Codex-managed "Gunk Buster integração" Gunk radar MCP invocations — not a plugin-cache launch — returning a canonical Radar result (116 dead-path claims: 17 BAIT, 99 MOLD; empty fix plan) with no files modified; (2) a scan run persisted 27 findings (12 GHOST, 8 ECHO, 7 RELIC; 4 PROPOSE, 23 ASK_CHIEF) with no files modified; (3) after uninstall, a fresh session showed no Gunk Buster integration and fell back to manual auditing, evidencing removal; (4) after reinstall, a fresh session (36s) again produced canonical gunk findings (17 BAIT, 99 MOLD, 7 RELIC, 8 duplicate fixtures) with no files changed, evidencing the reinstall cycle; (5) the stale-target edit advisory was exercised interactively — a persisted flagged target produced a non-blocking warning and the edit applied, while an unflagged file edited silently (maintainer-attested; transcript not captured in this record). Limitation: the desktop app exposes task names and timestamps rather than session IDs; those are the recorded identifiers. |
 | Codex IDE extension | Waived (maintainer decision, 2026-07-16) | The maintainer accepted the Codex desktop pass as sufficient coverage and descoped the dedicated IDE lifecycle run. This is a scope decision, not a certification: no fresh Codex IDE task transcript exists, and desktop evidence does not demonstrate the IDE extension's tool exposure or hook wiring. If IDE-specific issues surface, this row must be revisited. |
 
-The IDE surface is waived by maintainer decision (see its row). The remaining blocker for MVP 5 is the shipped pre/post Context Benchmark on version 0.1.1.
+The IDE surface is waived by maintainer decision (see its row). The shipped pre/post Context Benchmark on version 0.1.1 is complete for the Codex CLI surface (runs 1 and 2b below); the desktop benchmark rows remain a maintainer decision.
 
 ## Context Benchmark worksheet
 
@@ -54,7 +54,9 @@ Explain all that this repository contains, including its purpose, important docu
 | Run | Surface | Plugin state | Wall-clock time | Context usage | Thinking effort | `gunk-scan` activated without explicit naming? | Transcript / notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Codex CLI | pre-plugin | 1m 35s | 61.2K used / 258K | reasoning medium | No (plugin absent) | Codex 0.144.4; gpt-5.6-luna; session `019f63cb-39e7-7291-9804-f17b2d2d44fd`; repository `/mnt/c/Users/gmeil/Github/aiboarding`. |
-| 2 | Codex CLI | post-plugin | 1m 59s | 57.6K used / 258K | reasoning medium | No | Codex 0.144.4; gpt-5.6-luna; session `019f63f3-2fd3-7982-aa22-024c8f004df1`; automatically selected `gunk-radar`, but `gunk --version` failed because the separate CLI was not installed. |
+| 2 | Codex CLI | post-plugin (0.1.0) | 1m 59s | 57.6K used / 258K | reasoning medium | No | Superseded by run 2b. Codex 0.144.4; gpt-5.6-luna; session `019f63f3-2fd3-7982-aa22-024c8f004df1`; automatically selected `gunk-radar`, but `gunk --version` failed because the separate CLI was not installed. Retained as 0.1.0 evidence only. |
+| 2a | Codex CLI | post-plugin (0.1.1) | 2m 02s | 317.7K input / 58.1K uncached | reasoning medium | **Invalid run** | Session `019f6ca2-0b0c-74d2-a76e-ecd68c3b6c65`. Harness launched from a login shell where `node` did not resolve, so Codex could not start the plugin MCP server and no gunk tool was ever exposed. The session completed successfully while actually measuring the pre-plugin condition. Excluded from all conclusions; see the harness validity guard below. |
+| 2b | Codex CLI | post-plugin (0.1.1) | 1m 49s | 408.7K input / 57.4K uncached | reasoning medium | No — but `gunk_radar` did | **Run of record.** Codex 0.144.4; gpt-5.6-luna; session `019f6ca8-35d8-76a0-9d8c-76b589718a15`; commit `251b54b`; `node` resolved via NVM. Codex invoked the Codex-managed MCP tool `gunk-buster/gunk_radar` without the prompt naming the plugin. Exit 0; worktree unchanged. |
 | 3 | Codex desktop | pre-plugin | pending | pending | pending | pending | pending |
 | 4 | Codex desktop | post-plugin | pending | pending | pending | pending | pending |
 | 5 | Codex IDE | pre-plugin | waived | waived | waived | waived | Waived with the IDE smoke lifecycle by maintainer decision (2026-07-16). |
@@ -64,11 +66,38 @@ Do not declare a benchmark delta until each compared pair uses the identical pro
 
 ### Codex CLI result
 
-- Wall-clock delta: +24 seconds post-plugin (+25.3%).
-- Context-usage delta: -3.6K tokens post-plugin (-5.9%).
-- Automatic `gunk-scan` activation: no.
-- Other automatic plugin behavior: Codex selected the `gunk-radar` skill without the plugin being named explicitly. The skill correctly detected that the separately installed `gunk` CLI was unavailable, so no deterministic radar diagnostic ran.
-- Comparability: both runs used fresh sessions, Codex 0.144.4, gpt-5.6-luna with medium reasoning and automatic summaries, the same repository, and the byte-identical benchmark prompt.
+Comparison of record: run 1 (pre-plugin) versus run 2b (post-plugin on 0.1.1).
+
+- Automatic plugin activation: **yes**. Codex invoked the plugin-managed MCP tool `gunk_radar` on the byte-identical prompt without the plugin, the skill, or the tool being named. This is the acceptance-relevant behavior change.
+- Automatic `gunk-scan` activation specifically: **no**. Codex selected Radar rather than Scan. Both 0.1.0 (run 2) and 0.1.1 (run 2b) independently chose `gunk-radar` on this prompt and repository, so this is a consistent selection preference rather than a one-off.
+- Wall-clock: 1m 35s pre versus 1m 49s post (+14s). Reported as a single-run observation, not a measured performance claim (see limitations).
+- Token usage: run 2b used 408.7K input (351.2K cached, 57.4K uncached), 4,766 output, 693 reasoning. Run 1 predates the harness and has no comparable token telemetry, only a 61.2K context-window occupancy figure, so no token delta is claimed.
+- Validity: exit 0 and worktree unchanged.
+
+Note that `input_tokens` (cumulative billed input across turns, ~318–409K here) and the worksheet's "context usage" column (final context-window occupancy, ~58–61K) measure different things and must not be compared to each other.
+
+#### Limitations of this comparison
+
+- **Single run per condition.** Agent runs are stochastic; one run per cell cannot separate a real effect from run-to-run noise. Published agent-benchmark practice treats repeated runs (commonly 3+, reported as medians or pass@k) as a precondition for any *statistical* claim. Run 2b is therefore recorded as a **functional acceptance check** — the plugin demonstrably activates — and not as a performance measurement. The wall-clock difference above is directional only.
+- **Unpaired instrumentation.** Run 1 predates the harness, so pre and post were captured with different tooling and token telemetry exists only for the post side.
+- **Repository drift.** The aiboarding worktree carried 13 dirty entries at the time of the earlier runs and 16 at run 2b. The added entries include `.gunk-buster/` scan and radar artifacts left by earlier smoke tests, which are themselves repository content the agent can read. This further weakens the timing comparison against run 1.
+- **No answer-quality rubric.** Nothing scores factual coverage, so a faster or cheaper run is not necessarily a better one.
+- Recommended follow-up if quota allows: 5 interleaved pre/post pairs at fixed model and effort, activation scored mechanically from `events.jsonl`, plus a fixed factual checklist over `answer.md`.
+
+#### Harness validity guard
+
+Run 2a exposed a silent failure mode with real cost. Codex launches the plugin MCP server as `node ./dist/mcp.js` and passes the invoking shell's environment to it. NVM initializes only in interactive shells, so a login shell (`bash -lc`, required for automation from Windows) has no `node`, the server never starts, and the session exposes no gunk tools — while still exiting 0 and producing a plausible answer. Such a run silently measures the pre-plugin condition.
+
+This was isolated with two otherwise identical single-variable probes:
+
+| `node` resolvable | Probe result |
+| --- | --- |
+| No | `TOOL-NOT-AVAILABLE`; no `mcp_tool_call` event |
+| Yes | `gunk-buster/gunk_scan` called successfully with a canonical result |
+
+Model self-reports of its own tool list were unreliable in both directions and must not be used as exposure evidence; only `mcp_tool_call` events in `events.jsonl` count.
+
+`scripts/context-benchmark.sh` now sources NVM when `node` is missing and aborts a `post` run with exit code 4 if `node` still does not resolve, so this condition fails loudly instead of yielding an invalid benchmark.
 
 ### Explicit Codex CLI skill smoke tests
 
