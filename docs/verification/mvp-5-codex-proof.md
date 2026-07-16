@@ -84,6 +84,29 @@ Note that `input_tokens` (cumulative billed input across turns, ~318–409K here
 - **No answer-quality rubric.** Nothing scores factual coverage, so a faster or cheaper run is not necessarily a better one.
 - Recommended follow-up if quota allows: 5 interleaved pre/post pairs at fixed model and effort, activation scored mechanically from `events.jsonl`, plus a fixed factual checklist over `answer.md`.
 
+#### Matched-pair observation (runs 2a and 2b)
+
+Run 2a is invalid as a post-plugin row, but it is a well-matched control for run 2b: identical commit (`251b54b`), byte-identical worktree state (16 dirty entries), byte-identical prompt, same model, effort, harness, and host, six minutes apart. Exactly one variable differs — whether the plugin's MCP tools were exposed. Both runs had the plugin installed and its skills loaded, so this contrast isolates **tool exposure**, not plugin presence.
+
+| Metric | 2a tools absent | 2b tools present | Delta |
+| --- | ---: | ---: | ---: |
+| Wall clock (s) | 122.4 | 108.6 | -11.3% |
+| Input total | 317,728 | 408,664 | +28.6% |
+| Cached input | 259,584 | 351,232 | +35.3% |
+| Uncached input | 58,144 | 57,432 | -1.2% |
+| Output | 5,782 | 4,766 | -17.6% |
+| Reasoning | 813 | 693 | -14.8% |
+| Shell commands executed | 18 | 15 | -16.7% |
+| MCP tool calls | none | `gunk_radar` | — |
+
+The direction matches the independent Dominus Pax medium-effort result in [context-cleanup-benchmarks.md](context-cleanup-benchmarks.md) (wall -12.2%, reasoning -12.1%, input +6.8%): reasoning and wall time fall, cached and total input rise, uncached input is roughly flat. Two different mechanisms — context filtering there, tool availability here — on two different repositories produced the same signature. This is corroboration, not proof; both are single-run or small-sample observations and the claim boundary in that document still governs.
+
+Answer quality was scored against the five elements the prompt itself requests (purpose, documentation, agent instructions, commands, concerns), a rubric fixed by the prompt rather than derived after reading the answers. Both runs covered all five. The tools-present run was 34% shorter (688 vs 1,039 words) and ran fewer shell commands, yet surfaced a substantive finding the tools-absent run missed: the duplicated `cutting-a-release` skill across `.agents/skills/` and `.claude/skills/`, which run 2a saw but dismissed as local worktree context. Run 2b also critically filtered the Radar output rather than trusting it, explicitly separating intentional generated-target paths from real defects. The mechanism is consistent with the tool substituting for shell exploration. With n=1 per condition this is an observation, not a measured quality gain.
+
+#### Why Radar rather than Scan
+
+Both 0.1.0 (run 2) and 0.1.1 (run 2b) selected `gunk_radar` over `gunk_scan` on this prompt. The tool descriptions plausibly explain the preference: Radar advertises "wrong-claim findings", which maps closely onto the prompt's "concerns you would want resolved before making a change", while Scan advertises "stale, agent-readable repo residue". The acceptance criterion's expectation that `gunk-scan` specifically activates appears miscalibrated for this prompt; the plugin activating its most semantically apt tool is the desired behavior. This is an inferred explanation from description wording, not a tested hypothesis.
+
 #### Harness validity guard
 
 Run 2a exposed a silent failure mode with real cost. Codex launches the plugin MCP server as `node ./dist/mcp.js` and passes the invoking shell's environment to it. NVM initializes only in interactive shells, so a login shell (`bash -lc`, required for automation from Windows) has no `node`, the server never starts, and the session exposes no gunk tools — while still exiting 0 and producing a plausible answer. Such a run silently measures the pre-plugin condition.
