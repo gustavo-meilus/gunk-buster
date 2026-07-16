@@ -1,6 +1,6 @@
 # MVP 5 Codex proof record
 
-Status: **incomplete**. The automated installed-bundle contract and the Codex CLI path are evidenced below. The Codex desktop and IDE fresh-session smoke tests, and the final shipped pre-plugin/post-plugin Context Benchmark, still require interactive runs and must not be inferred from automated tests.
+Status: **incomplete**. The automated installed-bundle contract, the Codex CLI path, and the Codex desktop smoke lifecycle are evidenced below; the IDE lifecycle is waived by maintainer decision. The remaining gap is the final shipped pre-plugin/post-plugin Context Benchmark on version 0.1.1, which requires interactive runs and must not be inferred from automated tests.
 
 ## Certification scope
 
@@ -36,10 +36,10 @@ Each surface requires a fresh session and the same lifecycle: add the repository
 | Surface | Result | Evidence / limitation |
 | --- | --- | --- |
 | Codex CLI | Passed for the available CLI lifecycle | A fresh isolated `CODEX_HOME` completed marketplace add, plugin install, plugin listing, bundled MCP listing, plugin removal, and reinstall. The installed-bundle contract additionally passed skill discovery, MCP startup, diagnostic calls, hook wiring, and the no-manual-config boundary. A fresh interactive task transcript is still desirable, but the required CLI installation lifecycle is reproducibly evidenced. |
-| Codex desktop app | Not run | This repository session has no reliable interactive desktop-session transcript. Do not claim desktop certification from the CLI result. |
-| Codex IDE extension | Not run | VS Code is present on the host, but no fresh Codex IDE task and lifecycle transcript was captured. Do not claim IDE certification from process presence. |
+| Codex desktop app | Passed | Fresh desktop tasks against `aiboarding` with plugin 0.1.1, run 2026-07-16: (1) the unnamed prompt "check this repo for stale context" activated the gunk workflow (1m 32s) and the tool trace shows Codex-managed "Gunk Buster integração" Gunk radar MCP invocations — not a plugin-cache launch — returning a canonical Radar result (116 dead-path claims: 17 BAIT, 99 MOLD; empty fix plan) with no files modified; (2) a scan run persisted 27 findings (12 GHOST, 8 ECHO, 7 RELIC; 4 PROPOSE, 23 ASK_CHIEF) with no files modified; (3) after uninstall, a fresh session showed no Gunk Buster integration and fell back to manual auditing, evidencing removal; (4) after reinstall, a fresh session (36s) again produced canonical gunk findings (17 BAIT, 99 MOLD, 7 RELIC, 8 duplicate fixtures) with no files changed, evidencing the reinstall cycle; (5) the stale-target edit advisory was exercised interactively — a persisted flagged target produced a non-blocking warning and the edit applied, while an unflagged file edited silently (maintainer-attested; transcript not captured in this record). Limitation: the desktop app exposes task names and timestamps rather than session IDs; those are the recorded identifiers. |
+| Codex IDE extension | Waived (maintainer decision, 2026-07-16) | The maintainer accepted the Codex desktop pass as sufficient coverage and descoped the dedicated IDE lifecycle run. This is a scope decision, not a certification: no fresh Codex IDE task transcript exists, and desktop evidence does not demonstrate the IDE extension's tool exposure or hook wiring. If IDE-specific issues surface, this row must be revisited. |
 
-Because two required surfaces are not run, MVP 5 is not complete.
+The IDE surface is waived by maintainer decision (see its row). The remaining blocker for MVP 5 is the shipped pre/post Context Benchmark on version 0.1.1.
 
 ## Context Benchmark worksheet
 
@@ -57,8 +57,8 @@ Explain all that this repository contains, including its purpose, important docu
 | 2 | Codex CLI | post-plugin | 1m 59s | 57.6K used / 258K | reasoning medium | No | Codex 0.144.4; gpt-5.6-luna; session `019f63f3-2fd3-7982-aa22-024c8f004df1`; automatically selected `gunk-radar`, but `gunk --version` failed because the separate CLI was not installed. |
 | 3 | Codex desktop | pre-plugin | pending | pending | pending | pending | pending |
 | 4 | Codex desktop | post-plugin | pending | pending | pending | pending | pending |
-| 5 | Codex IDE | pre-plugin | pending | pending | pending | pending | pending |
-| 6 | Codex IDE | post-plugin | pending | pending | pending | pending | pending |
+| 5 | Codex IDE | pre-plugin | waived | waived | waived | waived | Waived with the IDE smoke lifecycle by maintainer decision (2026-07-16). |
+| 6 | Codex IDE | post-plugin | waived | waived | waived | waived | Waived with the IDE smoke lifecycle by maintainer decision (2026-07-16). |
 
 Do not declare a benchmark delta until each compared pair uses the identical prompt in fresh sessions and has recorded all measurements that the surface makes available. Report the raw values, pairwise deltas, and whether automatic `gunk-scan` activation occurred.
 
