@@ -1,12 +1,12 @@
 <p align="center">
+  <img src="assets/readme/gunk_buster.png" width="260" alt="Gunk Buster digital zombie mascot contained with stale documentation, broken links, and code fragments">
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-dark.svg">
     <img src="assets/readme/hero-light.svg" width="900" alt="Gunk Buster — stop stale repository context from steering coding agents wrong">
   </picture>
-</p>
-
-<p align="center">
-  <strong>Stop stale repository context from steering coding agents wrong.</strong>
 </p>
 
 <p align="center">
@@ -15,10 +15,10 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5b8c5a?style=flat-square" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/Node.js-20%2B-5b8c5a?style=flat-square" alt="Node.js 20 or later">
-  <img src="https://img.shields.io/badge/MCP-read--only-5b8c5a?style=flat-square" alt="Read-only MCP tools">
-  <img src="https://img.shields.io/badge/telemetry-none-5b8c5a?style=flat-square" alt="No telemetry">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f9f83?style=flat-square" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/Node.js-20%2B-2f9f83?style=flat-square" alt="Node.js 20 or later">
+  <img src="https://img.shields.io/badge/MCP-read--only-2f9f83?style=flat-square" alt="Read-only MCP tools">
+  <img src="https://img.shields.io/badge/telemetry-none-2f9f83?style=flat-square" alt="No telemetry">
 </p>
 
 <p align="center">
