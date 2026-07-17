@@ -116,6 +116,7 @@ describe("Codex installed bundle contract (#40)", () => {
 
   it("keeps the package and both plugin manifests on one release version", async () => {
     const packageManifest = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8")) as {
+      bin: Record<string, string>;
       version: string;
     };
     const codexManifest = JSON.parse(
@@ -126,6 +127,7 @@ describe("Codex installed bundle contract (#40)", () => {
     ) as { version: string };
 
     expect(packageManifest.version).toBe("0.5.0");
+    expect(packageManifest.bin).toEqual({ gunk: "dist/cli.js", "gunk-mcp": "dist/mcp.js" });
     expect(codexManifest.version).toBe(packageManifest.version);
     expect(claudeManifest.version).toBe(packageManifest.version);
   });

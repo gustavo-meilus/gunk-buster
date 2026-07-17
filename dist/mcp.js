@@ -31529,8 +31529,8 @@ var package_default = {
   type: "module",
   license: "MIT",
   bin: {
-    gunk: "./dist/cli.js",
-    "gunk-mcp": "./dist/mcp.js"
+    gunk: "dist/cli.js",
+    "gunk-mcp": "dist/mcp.js"
   },
   exports: {
     ".": "./dist/index.js"
