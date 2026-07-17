@@ -130,7 +130,7 @@ server.registerTool(
   "gunk_verify",
   {
     description:
-      "Check that no mutation left damage behind: broken links or agent-context mentions of a trapped path, informational git status, and the repo's configured verify.commands. Read-only apart from running the repo's own verify.commands.",
+      "Read-only damage check for broken links or agent-context mentions of a trapped path, plus informational git status. Repository-configured verify.commands are intentionally not executed over MCP.",
     inputSchema: {
       repoRoot: z.string().describe("Path to the repo (or any subdirectory of it) to verify"),
       config: configSchema
@@ -141,7 +141,10 @@ server.registerTool(
     annotations: { readOnlyHint: true },
   },
   async ({ repoRoot, config }) => {
-    const result = await verify(repoRoot, config === undefined ? {} : { config });
+    const result = await verify(repoRoot, {
+      ...(config === undefined ? {} : { config }),
+      runConfiguredCommands: false,
+    });
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
       structuredContent: result,

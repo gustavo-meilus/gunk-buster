@@ -1,0 +1,52 @@
+name: Feature proposal
+description: Propose a focused improvement within Gunk Buster's context-only safety boundaries
+title: "enhancement: "
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What agent-context failure or maintainer workflow is not handled today?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Concrete example
+      description: Show a safe, minimal repository shape or finding that demonstrates the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior, not an implementation preference.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scan / structural evidence
+        - Radar / factual contradictions
+        - Pile / report
+        - Trap / restore / verify
+        - MCP / skills / plugins / hooks
+        - Documentation
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Product boundaries
+      options:
+        - label: The proposal does not require source-code, import, AST, or dead-code analysis.
+          required: true
+        - label: The proposal preserves local-only operation and adds no telemetry.
+          required: true
+        - label: The proposal preserves read-only MCP and Chief approval for mutations.
+          required: true

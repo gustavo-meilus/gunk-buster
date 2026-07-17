@@ -217,7 +217,10 @@ describe("Codex installed bundle contract (#40)", () => {
 
         const unavailable = cliGuidanceOutcome(guidance, path.join(fakeBin, "missing"));
         expect(unavailable).toMatch(/separately\s+installed prerequisite/);
-        expect(unavailable).toContain("`npm install --global gunk-buster`");
+        expect(unavailable).toContain(
+          "https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-source",
+        );
+        expect(unavailable).not.toContain("npm install --global gunk-buster");
         expect(unavailable).not.toContain(command);
         expect(guidance).not.toMatch(/Bash|PLUGIN_ROOT|plugin.cache|plugin-cache/i);
       } finally {

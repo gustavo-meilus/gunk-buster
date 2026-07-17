@@ -31502,6 +31502,30 @@ var package_default = {
   name: "gunk-buster",
   version: "0.1.1",
   description: "Finds and quarantines context gunk \u2014 stale, agent-readable repo residue \u2014 before AI coding agents consume it.",
+  keywords: [
+    "ai-agents",
+    "coding-agents",
+    "agent-context",
+    "repository-hygiene",
+    "documentation",
+    "mcp",
+    "claude-code",
+    "codex",
+    "cli",
+    "local-first"
+  ],
+  homepage: "https://github.com/gustavo-meilus/gunk-buster#readme",
+  bugs: {
+    url: "https://github.com/gustavo-meilus/gunk-buster/issues"
+  },
+  repository: {
+    type: "git",
+    url: "git+https://github.com/gustavo-meilus/gunk-buster.git"
+  },
+  author: {
+    name: "Gustavo Meilus",
+    email: "gmeilus@outlook.com"
+  },
   type: "module",
   license: "MIT",
   bin: {
@@ -31514,6 +31538,9 @@ var package_default = {
   files: [
     "dist"
   ],
+  publishConfig: {
+    access: "public"
+  },
   engines: {
     node: ">=20"
   },
@@ -43341,7 +43368,7 @@ async function verify(repoRoot, context = {}) {
   );
   const gitStatus = (await runGit(root2, ["status", "--porcelain"])).split("\n").map((line) => line.trimEnd()).filter((line) => line !== "");
   const commands = [];
-  for (const command of config2.verify.commands) {
+  for (const command of context.runConfiguredCommands === false ? [] : config2.verify.commands) {
     const run = await runVerifyCommand(root2, command);
     commands.push(run);
     if (run.exitCode !== 0) {
@@ -43449,7 +43476,7 @@ server.registerTool(
 server.registerTool(
   "gunk_verify",
   {
-    description: "Check that no mutation left damage behind: broken links or agent-context mentions of a trapped path, informational git status, and the repo's configured verify.commands. Read-only apart from running the repo's own verify.commands.",
+    description: "Read-only damage check for broken links or agent-context mentions of a trapped path, plus informational git status. Repository-configured verify.commands are intentionally not executed over MCP.",
     inputSchema: {
       repoRoot: external_exports.string().describe("Path to the repo (or any subdirectory of it) to verify"),
       config: configSchema.optional().describe("Optional gunk.config.json-shaped override; omitted reads the repo's own config file, if any")
@@ -43458,7 +43485,10 @@ server.registerTool(
     annotations: { readOnlyHint: true }
   },
   async ({ repoRoot, config: config2 }) => {
-    const result = await verify(repoRoot, config2 === void 0 ? {} : { config: config2 });
+    const result = await verify(repoRoot, {
+      ...config2 === void 0 ? {} : { config: config2 },
+      runConfiguredCommands: false
+    });
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       structuredContent: result

@@ -1,0 +1,72 @@
+name: Bug report
+description: Report reproducible incorrect behavior in the CLI, MCP server, skills, plugins, or hooks
+title: "bug: "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Remove secrets and private repository content from every example.
+  - type: input
+    id: version
+    attributes:
+      label: Gunk Buster version
+      description: Output of `gunk --version`, or the plugin version and commit.
+      placeholder: 0.1.1
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - CLI
+        - MCP server
+        - Codex plugin
+        - Claude Code plugin
+        - Skill
+        - Advisory hook
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, and agent host/version when relevant.
+      placeholder: Windows 11, Node 20.19.0, Codex CLI 0.x
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Commands and the smallest safe repository shape that reproduces the issue.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I removed secrets and private repository content.
+          required: true
+        - label: This is not a vulnerability report; security issues follow SECURITY.md.
+          required: true

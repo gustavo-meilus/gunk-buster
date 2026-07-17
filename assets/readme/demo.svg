@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="520" viewBox="0 0 1080 520" role="img" aria-labelledby="title desc">
+  <title id="title">Gunk Radar terminal example</title>
+  <desc id="desc">Gunk Radar finds a package-manager contradiction in CLAUDE.md, labels it BAIT, and proposes changing npm install to pnpm install.</desc>
+  <rect width="1080" height="520" rx="24" fill="#101713"/>
+  <rect width="1080" height="54" rx="24" fill="#1c2820"/>
+  <rect y="30" width="1080" height="24" fill="#1c2820"/>
+  <circle cx="32" cy="27" r="8" fill="#ef6b5d"/><circle cx="58" cy="27" r="8" fill="#e4bd4d"/><circle cx="84" cy="27" r="8" fill="#62bd76"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="23">
+    <text x="34" y="103" fill="#8fbf78">$</text><text x="60" y="103" fill="#edf3e9">gunk radar</text>
+    <text x="34" y="155" fill="#d8b24b" font-weight="700">BAIT</text><text x="105" y="155" fill="#edf3e9">CLAUDE.md:3</text>
+    <text x="62" y="200" fill="#aab8aa">claim</text><text x="190" y="200" fill="#efb1a5">npm install</text>
+    <text x="62" y="242" fill="#aab8aa">repo fact</text><text x="190" y="242" fill="#b7d99d">packageManager: pnpm@9.1.0</text>
+    <text x="62" y="284" fill="#aab8aa">evidence</text><text x="190" y="284" fill="#edf3e9">CERTAIN · package-manager drift</text>
+    <text x="62" y="326" fill="#aab8aa">proposed</text><text x="190" y="326" fill="#edf3e9">npm install</text><text x="340" y="326" fill="#d8b24b">→</text><text x="380" y="326" fill="#b7d99d">pnpm install</text>
+    <text x="34" y="398" fill="#8fbf78">✓</text><text x="70" y="398" fill="#edf3e9">Radar complete · 3 findings · no docs edited</text>
+    <text x="34" y="454" fill="#7f9182">Agents may recommend. The CLI decides. The Chief approves.</text>
+  </g>
+</svg>

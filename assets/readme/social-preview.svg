@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Gunk Buster</title>
+  <desc id="desc">Stop stale repository context from steering coding agents wrong.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#101713"/><stop offset="1" stop-color="#2b3a2e"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#789d63" stop-opacity=".28"/><stop offset="1" stop-color="#789d63" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="1040" cy="120" r="460" fill="url(#glow)"/>
+  <g transform="translate(92 112)">
+    <path d="M68 30h118l38 45-21 174H50L29 75z" fill="#edf1e7"/>
+    <path d="M84 0h86l16 34H68z" fill="#dfb24a"/>
+    <path d="M78 106h98M71 148h112M66 190h122" stroke="#769b61" stroke-width="16" stroke-linecap="round"/>
+    <path d="M18 249h218" stroke="#edf1e7" stroke-width="18" stroke-linecap="round"/>
+  </g>
+  <g fill="#f3f5ed" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <text x="395" y="235" font-size="84" font-weight="800" letter-spacing="-4">GUNK BUSTER</text>
+    <text x="400" y="310" font-size="31" font-weight="650">STOP STALE REPO CONTEXT</text>
+    <text x="400" y="353" font-size="31" font-weight="650">FROM STEERING AGENTS WRONG.</text>
+    <text x="400" y="425" font-size="23" fill="#b5c3b5">local · deterministic · explainable · reversible</text>
+    <text x="400" y="488" font-size="22" fill="#dfb24a">github.com/gustavo-meilus/gunk-buster</text>
+  </g>
+</svg>

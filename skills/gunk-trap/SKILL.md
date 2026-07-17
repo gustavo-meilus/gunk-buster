@@ -32,10 +32,11 @@ executable through an installation-directory path.
 ### CLI unavailable
 
 If command lookup or `gunk --version` fails, tell Chief that the separately
-installed prerequisite is missing. Give the documented installation command,
-`npm install --global gunk-buster`, then say to retry `gunk --version`. Do not
-present trap, bust, or ask as currently runnable, and do not install anything
-on Chief's behalf.
+installed prerequisite is missing. Give the supported source-install guide,
+`https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-source`,
+then say to retry `gunk --version`. Do not present trap, bust, or ask as
+currently runnable, install anything on Chief's behalf, or claim an npm package
+is available until a public package release exists.
 
 Installing the plugin exposes guidance and read-only MCP tools; it does not
 install the mutation CLI or change the Chief-approval boundary.

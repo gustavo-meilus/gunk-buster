@@ -34,6 +34,11 @@ const execAsync = promisify(exec);
 export interface VerifyContext {
   /** Pre-loaded config, so callers that already have one (the CLI, trap/restore auto-runs) don't re-read the file. */
   config?: GunkConfig;
+  /**
+   * Whether to execute repository-configured shell commands. The CLI keeps
+   * this enabled; read-only surfaces such as MCP must disable it.
+   */
+  runConfiguredCommands?: boolean;
   /** Clock injection for deterministic tests. */
   now?: () => Date;
 }
@@ -126,7 +131,7 @@ export async function verify(repoRoot: string, context: VerifyContext = {}): Pro
 
   // 4. User commands — run in order, output captured; non-zero exit is damage.
   const commands: VerifyCommandRun[] = [];
-  for (const command of config.verify.commands) {
+  for (const command of context.runConfiguredCommands === false ? [] : config.verify.commands) {
     const run = await runVerifyCommand(root, command);
     commands.push(run);
     if (run.exitCode !== 0) {

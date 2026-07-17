@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile } from "node:fs/promises";
+import { copyFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -167,7 +167,7 @@ describe("gunk-mcp — read-only tools (#27, #28)", () => {
 
       const response = await client.callTool({ name: "gunk_verify", arguments: { repoRoot: repo } });
 
-      const expected = await verify(repo);
+      const expected = await verify(repo, { runConfiguredCommands: false });
       const structuredContent = response.structuredContent as Record<string, unknown>;
       const result = verifyResultSchema.parse(structuredContent);
       expect({ ...result, verifiedAt: "<verifiedAt>" }).toEqual({
@@ -176,6 +176,30 @@ describe("gunk-mcp — read-only tools (#27, #28)", () => {
       });
 
       expectNoGunkBusterDir(repo);
+    });
+
+    it("never executes repository-configured verify.commands", async () => {
+      const fixtureRepo = await createFixtureRepo("clean-repo");
+      const marker = path.join(fixtureRepo, "mcp-marker.txt");
+      try {
+        await writeFile(
+          path.join(fixtureRepo, "gunk.config.json"),
+          JSON.stringify({
+            verify: {
+              commands: [`node -e "require('node:fs').writeFileSync('mcp-marker.txt','mutated')"`],
+            },
+          }),
+        );
+        client = await connectClient();
+
+        const response = await client.callTool({ name: "gunk_verify", arguments: { repoRoot: fixtureRepo } });
+        const result = verifyResultSchema.parse(response.structuredContent as Record<string, unknown>);
+
+        expect(result.commands).toEqual([]);
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        await removeDir(fixtureRepo);
+      }
     });
   });
 });
