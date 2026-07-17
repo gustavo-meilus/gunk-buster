@@ -52,6 +52,29 @@ fi
 }
 command -v python3 >/dev/null || { echo "python3 is required to summarize Codex JSONL output" >&2; exit 127; }
 
+# A post-plugin run is only valid if Codex can actually start the plugin's MCP
+# server, which it launches as `node ./dist/mcp.js`. Codex passes this shell's
+# environment to that subprocess, so an unresolvable `node` yields a session
+# with no gunk tools -- a run that looks successful but silently measures the
+# pre-plugin condition. NVM only initializes in interactive shells, so a login
+# shell (`bash -lc`) fails this check unless NVM is sourced first.
+if [[ "$phase" == post ]] && ! command -v node >/dev/null; then
+  if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    . "${NVM_DIR:-$HOME/.nvm}/nvm.sh" >/dev/null 2>&1 || true
+  fi
+fi
+if [[ "$phase" == post ]] && ! command -v node >/dev/null; then
+  cat >&2 <<'EOF'
+INVALID: node does not resolve in this shell, so Codex cannot launch the plugin
+MCP server and the session would expose no gunk tools. The run would appear to
+succeed while actually measuring the pre-plugin condition.
+Put node on PATH before the post run, for example:
+  export PATH="$HOME/.nvm/versions/node/<version>/bin:$PATH"
+EOF
+  exit 4
+fi
+
 repo="$(cd "$repo" && pwd -P)"
 repo_name="$(basename "$repo")"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$phase"

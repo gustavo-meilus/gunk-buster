@@ -2,7 +2,7 @@
 
 Gunk Buster finds stale repo residue — hallucination bait — before AI coding agents eat it. Deterministic CLI-first tool; agent surfaces (skills, plugins, MCP) are thin shells over the CLI core.
 
-Project status: pre-code. `reference/` holds the raw idea mesh (non-authoritative). Decisions land in `CONTEXT.md`, `ROADMAP.md`, `docs/adr/`, and `docs/specs/` as the spec-driven flow produces them. Work is tracked on GitHub Issues under four MVP milestones (scan → radar → trap → agent ecosystem); the tool is local-only, so there is no guard/CI milestone.
+Project status: implemented through the Codex distribution port. The repository contains the TypeScript/Node CLI, deterministic engine, MCP server, skills, Claude Code and Codex plugins, hooks, tests, and built MCP output. `reference/` holds the original idea mesh and remains non-authoritative. Decisions land in `CONTEXT.md`, `ROADMAP.md`, `docs/adr/`, and `docs/specs/`. Work is tracked in GitHub Issues; the tool is local-only, so there is no remote guard/CI product surface.
 
 ## Agent skills
 

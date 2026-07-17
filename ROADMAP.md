@@ -16,7 +16,7 @@ The safety moat and the first mutation. `gunk trap` moves approved candidates to
 
 ## MVP 4 — Agent ecosystem
 
-Distribution. An MCP server exposes the CLI's operations as deterministic tools; thin skills (gunk-scan, gunk-radar, gunk-trap, gunk-restore) teach agents when to call the engine; plugins ship for Claude Code first, then Codex, then Copilot; subagent profiles are read-only by default; hooks are optional warnings, never load-bearing. The CLI stays the single source of truth — every surface is a shell over it.
+Distribution. An MCP server exposes the CLI's operations as deterministic tools; thin skills (gunk-scan, gunk-radar, gunk-trap, gunk-restore) teach agents when to call the engine; plugins ship for Claude Code first, then Codex, then Copilot; subagent profiles are read-only by default; hooks are optional warnings, never load-bearing. The CLI stays the single source of truth — every surface is a shell over it. Full decision set: [docs/specs/mvp-4-agent-ecosystem.md](docs/specs/mvp-4-agent-ecosystem.md).
 
 ## MVP 5 — Codex port
 
@@ -31,4 +31,4 @@ The honest metric. Instead of estimating token savings, measure them: in a fresh
 - **Code analysis of any kind** — no import graphs, no dead-code detection, no AST parsing. Code files are hard-protected and can never be candidates ([ADR-0001](docs/adr/0001-context-only-scope.md)). Dead-code tools already own that space.
 - **Numeric scoring** — no per-file scores, no repo score, no thresholds. Classification is explicit evidence → verdict ([ADR-0002](docs/adr/0002-verdict-lattice-not-scoring.md)).
 - **CI / remote surfaces** — no guard mode, no GitHub Action, no PR comments. The product is local-only ([ADR-0004](docs/adr/0004-local-only.md)). Findings never cause a non-zero exit in any milestone.
-- **Telemetry, network calls, cloud anything.**
+- **Built-in telemetry, network calls, cloud anything.** Chief-configured CLI verification commands are ordinary local shell commands and may have their own effects; MCP verification never executes them.

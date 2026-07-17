@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280" role="img" aria-labelledby="title desc">
+  <title id="title">Gunk Buster</title>
+  <desc id="desc">Find hallucination bait before coding agents eat it.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#031326"/><stop offset="1" stop-color="#0b2f39"/></linearGradient>
+    <linearGradient id="accent" x1="0" x2="1"><stop stop-color="#7de1bf"/><stop offset="1" stop-color="#45b693"/></linearGradient>
+  </defs>
+  <rect width="1200" height="280" rx="30" fill="url(#bg)"/>
+  <circle cx="1080" cy="20" r="230" fill="#62c9a8" opacity=".12"/>
+  <path d="M250 52h700" stroke="url(#accent)" stroke-width="7" stroke-linecap="round" opacity=".55"/>
+  <g fill="#f6fffb" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <text x="600" y="139" font-size="72" font-weight="850" letter-spacing="-3">GUNK BUSTER</text>
+    <text x="600" y="190" font-size="23" font-weight="700">FIND HALLUCINATION BAIT BEFORE AGENTS EAT IT.</text>
+    <text x="600" y="235" font-size="20" fill="#abd9ca">local · deterministic · explainable · reversible</text>
+  </g>
+  <rect x="540" y="252" width="88" height="8" rx="4" fill="#62c9a8"/>
+  <rect x="638" y="252" width="32" height="8" rx="4" fill="#ff5b4d"/>
+</svg>

@@ -2,6 +2,30 @@
   "name": "gunk-buster",
   "version": "0.1.1",
   "description": "Finds and quarantines context gunk — stale, agent-readable repo residue — before AI coding agents consume it.",
+  "keywords": [
+    "ai-agents",
+    "coding-agents",
+    "agent-context",
+    "repository-hygiene",
+    "documentation",
+    "mcp",
+    "claude-code",
+    "codex",
+    "cli",
+    "local-first"
+  ],
+  "homepage": "https://github.com/gustavo-meilus/gunk-buster#readme",
+  "bugs": {
+    "url": "https://github.com/gustavo-meilus/gunk-buster/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gustavo-meilus/gunk-buster.git"
+  },
+  "author": {
+    "name": "Gustavo Meilus",
+    "email": "gmeilus@outlook.com"
+  },
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -14,6 +38,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
