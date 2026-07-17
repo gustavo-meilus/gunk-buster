@@ -1,6 +1,6 @@
 {
   "name": "gunk-buster",
-  "version": "0.1.1",
+  "version": "0.5.0",
   "description": "Finds and quarantines context gunk — stale, agent-readable repo residue — before AI coding agents consume it.",
   "keywords": [
     "ai-agents",

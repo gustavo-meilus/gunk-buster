@@ -76,15 +76,11 @@ Restart the session after installation, then use the same unnamed prompt or invo
 
 ### CLI
 
-The plugin is deliberately read-only. Trapping, restoring, and applying approved fixes require the separately installed `gunk` CLI. Until the first npm release is published, install it from a clone:
+The plugin is deliberately read-only. Trapping, restoring, and applying approved fixes require the separately installed `gunk` CLI:
 
 ```bash
-git clone https://github.com/gustavo-meilus/gunk-buster.git
-cd gunk-buster
-corepack enable
-pnpm install --frozen-lockfile
-pnpm build
-npm install --global .
+npm install --global gunk-buster
+gunk --version
 ```
 
 Then establish a baseline:

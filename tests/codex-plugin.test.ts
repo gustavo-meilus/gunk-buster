@@ -14,6 +14,7 @@ const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 
 interface CodexPluginManifest {
   name: string;
+  version: string;
   skills: string;
   mcpServers: string;
   hooks: string;
@@ -110,6 +111,22 @@ describe("Codex installed bundle contract (#40)", () => {
     const server = servers.find((candidate) => candidate.name === "gunk-buster");
     expect(server?.transport.args).toEqual(["./dist/mcp.js"]);
     expect(path.resolve(server?.transport.cwd ?? "")).toBe(path.resolve(installedRoot));
+  });
+
+  it("keeps the package and both plugin manifests on one release version", async () => {
+    const packageManifest = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8")) as {
+      version: string;
+    };
+    const codexManifest = JSON.parse(
+      await readFile(path.join(installedRoot, ".codex-plugin", "plugin.json"), "utf8"),
+    ) as CodexPluginManifest;
+    const claudeManifest = JSON.parse(
+      await readFile(path.join(packageRoot, ".claude-plugin", "plugin.json"), "utf8"),
+    ) as { version: string };
+
+    expect(packageManifest.version).toBe("0.5.0");
+    expect(codexManifest.version).toBe(packageManifest.version);
+    expect(claudeManifest.version).toBe(packageManifest.version);
   });
 
   it("exposes the stale-target advisory through Codex plugin lifecycle wiring", async () => {
@@ -218,9 +235,9 @@ describe("Codex installed bundle contract (#40)", () => {
         const unavailable = cliGuidanceOutcome(guidance, path.join(fakeBin, "missing"));
         expect(unavailable).toMatch(/separately\s+installed prerequisite/);
         expect(unavailable).toContain(
-          "https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-source",
+          "https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-npm",
         );
-        expect(unavailable).not.toContain("npm install --global gunk-buster");
+        expect(unavailable).toContain("npm install --global gunk-buster");
         expect(unavailable).not.toContain(command);
         expect(guidance).not.toMatch(/Bash|PLUGIN_ROOT|plugin.cache|plugin-cache/i);
       } finally {
