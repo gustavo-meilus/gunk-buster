@@ -50,9 +50,31 @@ Restart the session after installation. Remove it through Claude Code's plugin m
 
 The bundled `gunk-auditor` requests a read-only allowlist. Current host behavior for plugin-loaded subagents does not enforce that allowlist as a structural boundary; see [Safety](SAFETY.md#claude-auditor-limitation).
 
+## CLI from npm
+
+Install the public CLI globally:
+
+```bash
+npm install --global gunk-buster
+gunk --version
+gunk --help
+```
+
+Update to the current release with:
+
+```bash
+npm install --global gunk-buster@latest
+```
+
+Remove the global CLI with:
+
+```bash
+npm uninstall --global gunk-buster
+```
+
 ## CLI from source
 
-The public npm package has not been published yet. Until it is, the supported CLI installation path is a local clone:
+For development or an unreleased checkout:
 
 ```bash
 git clone https://github.com/gustavo-meilus/gunk-buster.git
@@ -63,26 +85,20 @@ pnpm build
 npm install --global .
 ```
 
-Verify the executable:
+Verify the source-installed executable:
 
 ```bash
 gunk --version
 gunk --help
 ```
 
-To update, pull the repository, rebuild, and reinstall:
+To update a source installation, pull the repository, rebuild, and reinstall:
 
 ```bash
 git pull --ff-only
 pnpm install --frozen-lockfile
 pnpm build
 npm install --global .
-```
-
-Remove the global CLI with:
-
-```bash
-npm uninstall --global gunk-buster
 ```
 
 ## Development checkout

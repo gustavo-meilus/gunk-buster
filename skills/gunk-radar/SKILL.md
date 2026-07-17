@@ -50,11 +50,11 @@ gunk radar --fix
 ### CLI unavailable
 
 If command lookup or `gunk --version` fails, tell Chief that the separately
-installed prerequisite is missing. Provide the supported source-install guide,
-`https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-source`,
-and say to retry `gunk --version`; do not install it or present the fix as
-currently runnable. Do not claim an npm package is available until a public
-package release exists.
+installed prerequisite is missing. Provide `npm install --global gunk-buster`
+and the supported install guide,
+`https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-npm`,
+then say to retry `gunk --version`; do not install it or present the fix as
+currently runnable.
 
 This applies every suggestion-carrying claim finding behind one Chief
 confirmation (or `--yes` to pre-approve it), then auto-runs verify. `--force`

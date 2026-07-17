@@ -30,11 +30,11 @@ path.
 ### CLI unavailable
 
 If command lookup or `gunk --version` fails, tell Chief that the separately
-installed prerequisite is missing. Give the supported source-install guide,
-`https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-source`,
+installed prerequisite is missing. Give `npm install --global gunk-buster`
+and the supported install guide,
+`https://github.com/gustavo-meilus/gunk-buster/blob/main/docs/INSTALL.md#cli-from-npm`,
 then say to retry `gunk --version`. Do not present restore as currently
-runnable, install anything on Chief's behalf, or claim an npm package is
-available until a public package release exists.
+runnable or install anything on Chief's behalf.
 
 Installing the plugin exposes guidance and read-only MCP tools; it does not
 install the mutation CLI or change the Chief-approval boundary.
@@ -73,10 +73,12 @@ whichever one Chief pointed at. Don't just emit the command.
 
 ## After suggesting or running a restore, call `gunk_verify`
 
-`gunk_verify` (or CLI `gunk verify`) is read-only apart from the repo's own
-`verify.commands`, and it never runs the restore itself — it only checks the
-*delta*: did this mutation leave damage behind? It answers "did the restore
-break anything?", never "is the repo perfect?" (that's `gunk_scan`'s job).
+`gunk_verify` is fully read-only and deliberately suppresses the repo's own
+`verify.commands`; CLI `gunk verify` runs those configured commands only in
+the explicitly invoked terminal workflow. Neither runs the restore itself —
+verification only checks the *delta*: did this mutation leave damage behind?
+It answers "did the restore break anything?", never "is the repo perfect?"
+(that's `gunk_scan`'s job).
 
 Call it with `{ repoRoot }` after a restore and read `passed`:
 
