@@ -21,7 +21,8 @@ interface CodexPluginManifest {
 }
 
 function guidanceSection(guidance: string, heading: "CLI available" | "CLI unavailable"): string {
-  const match = guidance.match(new RegExp(`### ${heading}\\n\\n([\\s\\S]*?)(?=\\n### |\\n## )`));
+  const newline = "\\r?\\n";
+  const match = guidance.match(new RegExp(`### ${heading}${newline}${newline}([\\s\\S]*?)(?=${newline}### |${newline}## )`));
   if (!match?.[1]) throw new Error(`Missing ${heading} guidance`);
   return match[1];
 }
