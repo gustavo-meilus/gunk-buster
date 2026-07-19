@@ -100,4 +100,31 @@ describe("scan reference assertions (#54)", () => {
     expect(result.findings).toContainEqual(expect.objectContaining({ type: "file", path: "docs/untracked.md", label: "GHOST" }));
     expect((result.diagnostics ?? []).map((diagnostic) => diagnostic.code)).toContain("source-glob-empty");
   });
+
+  it("does not let an untracked document link keep an indexed candidate live", async () => {
+    const root = await repo({
+      "docs/target.md": "# target\n",
+    });
+    await writeFile(path.join(root, "docs", "untracked.md"), "# source\n\n[target](target.md)\n");
+
+    const result = await scan(root);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({ type: "file", path: "docs/target.md", label: "GHOST" }),
+    );
+  });
+
+  it("accepts a trusted source target that is an indexed directory", async () => {
+    const root = await repo({
+      "docs/agent.md": "# agent\n",
+      "registry.json": JSON.stringify({ target: "docs" }),
+      "gunk.config.json": JSON.stringify({ references: { sources: [{
+        name: "registry", files: ["registry.json"], format: "json", selectors: ["target"], resolveFrom: "repository-root",
+      }] } }),
+    });
+
+    const result = await scan(root);
+    expect(result.findings).not.toContainEqual(
+      expect.objectContaining({ type: "reference", path: "registry.json", target: "docs", source: "registry" }),
+    );
+  });
 });

@@ -6,6 +6,8 @@ Tracked file check: `src/index.ts` is still here.
 
 Tracked directory check: `src/` holds the source.
 
+MIME type check: `application/json` is not a repository path.
+
 Globs are skipped: `src/*.ts`
 
 Placeholders are skipped: `<repo>/config.json`, `{project}/README.md`, `$HOME/notes.md`

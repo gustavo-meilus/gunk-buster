@@ -53825,6 +53825,7 @@ var URI_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]+:/;
 var DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 var UNC_PATH = /^(?:\\\\|\/\/)/;
 var EXPRESSION_SYNTAX = /[=*?\[\]{}<>$()]/;
+var MIME_TYPE = /^(?:application|audio|example|font|haptics|image|message|model|multipart|text|video|x-[A-Za-z0-9!#$&^_.+-]+)\/[A-Za-z0-9!#$&^_.+-]+$/i;
 var CLEAN_SEGMENT = /^[A-Za-z0-9._-]+$/;
 var FILE_EXTENSION = /(?:^|\/)[A-Za-z0-9_-][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,16}$/;
 function repositoryInventory(files) {
@@ -53849,6 +53850,7 @@ function resolveDocumentPath(sourcePath, rawToken, line, inventory, explicitSynt
   const token = rawToken.trim();
   if (token === "" || URI_SCHEME.test(token) || DRIVE_PATH.test(token) || UNC_PATH.test(token) || EXPRESSION_SYNTAX.test(token) || token.startsWith("@")) return null;
   const forward = token.replace(/\\/g, "/");
+  if (MIME_TYPE.test(forward)) return null;
   const repositoryAnchored = forward.startsWith("/");
   const explicitlyRelative = /^(?:\.\.?\/)/.test(forward);
   const withoutAnchor = repositoryAnchored ? forward.slice(1) : forward;
@@ -54041,7 +54043,7 @@ function extractReferences(fromPath, tree, filePaths) {
 async function buildDocGraph(repoRoot, fileIndex, inventoryPaths = new Set(fileIndex.map((entry) => entry.path))) {
   const filePaths = inventoryPaths;
   const parsable = fileIndex.filter(
-    (entry) => (entry.kind === "doc" || entry.kind === "agent-context") && DOC_EXTENSIONS.has(path5.posix.extname(entry.path).toLowerCase())
+    (entry) => inventoryPaths.has(entry.path) && (entry.kind === "doc" || entry.kind === "agent-context") && DOC_EXTENSIONS.has(path5.posix.extname(entry.path).toLowerCase())
   );
   const references = [];
   const outbound = /* @__PURE__ */ new Map();
@@ -55928,6 +55930,7 @@ function targetPath(sourcePath, target, resolveFrom) {
 }
 async function buildConfiguredAssertions(repoRoot, entries, inventory, config2) {
   const entryByPath = new Map(entries.filter((entry) => inventory.has(entry.path)).map((entry) => [entry.path, entry]));
+  const repositoryPaths = repositoryInventory(inventory);
   const assertions = [];
   const broken = [];
   const diagnostics = [];
@@ -55940,7 +55943,7 @@ async function buildConfiguredAssertions(repoRoot, entries, inventory, config2) 
     const target = targetPath(sourcePath, raw, definition3.resolveFrom);
     if (target === null) {
       broken.push({ type: "reference", path: sourcePath, target: raw, source: definition3.name, selector, ...line ? { line } : {}, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${raw}" cannot resolve inside the repository` }] });
-    } else if (inventory.has(target)) {
+    } else if (repositoryPaths.files.has(target) || repositoryPaths.directories.has(target)) {
       assertions.push({ source: definition3.name, sourcePath, selector, ...line ? { location: line } : {}, target });
     } else {
       broken.push({ type: "reference", path: sourcePath, target, source: definition3.name, selector, ...line ? { line } : {}, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${target}" does not exist` }] });

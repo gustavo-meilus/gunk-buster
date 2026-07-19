@@ -51,8 +51,8 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
     );
 
     expect(finding).toBeDefined();
-    // Line 17 is the opening fence; line 18 is the content line.
-    expect(finding?.line).toBe(18);
+    // Line 19 is the opening fence; line 20 is the content line.
+    expect(finding?.line).toBe(20);
   });
 
   it("never flags an existing tracked file mentioned in a code span", () => {
@@ -93,6 +93,7 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
   it("does not mistake MIME types or scoped packages for repository paths", () => {
     const paths = deadPathFindings(result).map((f) => f.actual);
     expect(paths).not.toContain("video/mp4");
+    expect(paths).not.toContain("application/json");
     expect(paths).not.toContain("@scope/package");
   });
 
@@ -146,7 +147,7 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
       (f) => f.path === "AGENTS.md" && f.actual === "src/gone.ts",
     );
     expect(finding).toBeDefined();
-    expect(finding?.line).toBe(25);
+    expect(finding?.line).toBe(27);
     expect(finding?.evidence[0]?.confidence).toBe("STRONG");
   });
 

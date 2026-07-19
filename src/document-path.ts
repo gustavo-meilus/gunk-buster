@@ -20,6 +20,7 @@ const URI_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]+:/;
 const DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 const UNC_PATH = /^(?:\\\\|\/\/)/;
 const EXPRESSION_SYNTAX = /[=*?\[\]{}<>$()]/;
+const MIME_TYPE = /^(?:application|audio|example|font|haptics|image|message|model|multipart|text|video|x-[A-Za-z0-9!#$&^_.+-]+)\/[A-Za-z0-9!#$&^_.+-]+$/i;
 const CLEAN_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const FILE_EXTENSION = /(?:^|\/)[A-Za-z0-9_-][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,16}$/;
 
@@ -61,6 +62,7 @@ export function resolveDocumentPath(
   ) return null;
 
   const forward = token.replace(/\\/g, "/");
+  if (MIME_TYPE.test(forward)) return null;
   const repositoryAnchored = forward.startsWith("/");
   const explicitlyRelative = /^(?:\.\.?\/)/.test(forward);
   const withoutAnchor = repositoryAnchored ? forward.slice(1) : forward;

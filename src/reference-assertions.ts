@@ -5,6 +5,7 @@ import type { BrokenReferenceFinding, ReferenceDiagnostic } from "./schema.js";
 import { glob } from "tinyglobby";
 import { parse as parseJsonWithPointers } from "json-source-map";
 import { LineCounter, parseDocument } from "yaml";
+import { repositoryInventory } from "./document-path.js";
 
 export interface ReferenceAssertion {
   source: string;
@@ -73,6 +74,7 @@ function targetPath(sourcePath: string, target: string, resolveFrom: "source-dir
 
 export async function buildConfiguredAssertions(repoRoot: string, entries: readonly FileEntry[], inventory: ReadonlySet<string>, config: GunkConfig): Promise<ReferenceAssertionGraph> {
   const entryByPath = new Map(entries.filter((entry) => inventory.has(entry.path)).map((entry) => [entry.path, entry]));
+  const repositoryPaths = repositoryInventory(inventory);
   const assertions: ReferenceAssertion[] = [];
   const broken: BrokenReferenceFinding[] = [];
   const diagnostics: ReferenceDiagnostic[] = [];
@@ -86,7 +88,7 @@ export async function buildConfiguredAssertions(repoRoot: string, entries: reado
     const target = targetPath(sourcePath, raw, definition.resolveFrom);
     if (target === null) {
       broken.push({ type: "reference", path: sourcePath, target: raw, source: definition.name, selector, ...(line ? { line } : {}), evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${raw}" cannot resolve inside the repository` }] });
-    } else if (inventory.has(target)) {
+    } else if (repositoryPaths.files.has(target) || repositoryPaths.directories.has(target)) {
       assertions.push({ source: definition.name, sourcePath, selector, ...(line ? { location: line } : {}), target });
     } else {
       broken.push({ type: "reference", path: sourcePath, target, source: definition.name, selector, ...(line ? { line } : {}), evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${target}" does not exist` }] });

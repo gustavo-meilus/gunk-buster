@@ -351,6 +351,7 @@ export async function buildDocGraph(
   const filePaths = inventoryPaths;
   const parsable = fileIndex.filter(
     (entry) =>
+      inventoryPaths.has(entry.path) &&
       (entry.kind === "doc" || entry.kind === "agent-context") &&
       DOC_EXTENSIONS.has(path.posix.extname(entry.path).toLowerCase()),
   );
