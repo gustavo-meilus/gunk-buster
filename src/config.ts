@@ -82,8 +82,15 @@ export const referenceSourceSchema = z.discriminatedUnion("format", [
   textReferenceSourceSchema,
 ]);
 
+export const copyRelationshipSchema = z.strictObject({
+  canonical: z.string().min(1),
+  derivative: z.string().min(1),
+  reason: z.string().trim().min(1),
+});
+
 export const referencesConfigSchema = z.strictObject({
   sources: z.array(referenceSourceSchema).default([]),
+  copies: z.array(copyRelationshipSchema).default([]),
 });
 
 // strictObject: an unknown knob (e.g. a typo) is a tool error, never

@@ -19,6 +19,12 @@ export interface ReferenceAssertionGraph {
   referenced: ReadonlySet<string>;
   broken: readonly BrokenReferenceFinding[];
   diagnostics: readonly ReferenceDiagnostic[];
+  copyRelationships: readonly ValidCopyRelationship[];
+}
+
+export interface ValidCopyRelationship {
+  canonical: string;
+  derivative: string;
 }
 
 function assertionKey(assertion: ReferenceAssertion): string {
@@ -67,9 +73,11 @@ function targetPath(sourcePath: string, target: string, resolveFrom: "source-dir
 
 export async function buildConfiguredAssertions(repoRoot: string, entries: readonly FileEntry[], config: GunkConfig): Promise<ReferenceAssertionGraph> {
   const inventory = new Set(entries.map((entry) => entry.path));
+  const entryByPath = new Map(entries.map((entry) => [entry.path, entry]));
   const assertions: ReferenceAssertion[] = [];
   const broken: BrokenReferenceFinding[] = [];
   const diagnostics: ReferenceDiagnostic[] = [];
+  const copyRelationships: ValidCopyRelationship[] = [];
 
   const record = (definition: GunkConfig["references"]["sources"][number], sourcePath: string, selector: string, raw: unknown, line?: number): void => {
     if (typeof raw !== "string") {
@@ -132,6 +140,20 @@ export async function buildConfiguredAssertions(repoRoot: string, entries: reado
     }
   }
 
+  for (const [index, relationship] of config.references.copies.entries()) {
+    const selector = `references.copies.${index}`;
+    const invalid = [relationship.canonical, relationship.derivative].filter((target) => entryByPath.get(target)?.kind !== "doc");
+    if (invalid.length > 0) {
+      for (const target of invalid) {
+        const exists = inventory.has(target);
+        broken.push({ type: "reference", path: "gunk.config.json", target, source: "copy-relationship", selector, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: exists ? `copy relationship target "${target}" is not a document` : `copy relationship target "${target}" does not exist` }] });
+      }
+      continue;
+    }
+    assertions.push({ source: "copy-relationship", sourcePath: "gunk.config.json", selector, target: relationship.derivative });
+    copyRelationships.push({ canonical: relationship.canonical, derivative: relationship.derivative });
+  }
+
   const retained = deduplicateAssertions(assertions);
-  return { assertions: retained, referenced: new Set(retained.map((a) => a.target)), broken, diagnostics };
+  return { assertions: retained, referenced: new Set(retained.map((a) => a.target)), broken, diagnostics, copyRelationships };
 }

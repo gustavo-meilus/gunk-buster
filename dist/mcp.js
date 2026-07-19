@@ -41180,8 +41180,14 @@ var referenceSourceSchema = external_exports.discriminatedUnion("format", [
   structuredReferenceSourceSchema,
   textReferenceSourceSchema
 ]);
+var copyRelationshipSchema = external_exports.strictObject({
+  canonical: external_exports.string().min(1),
+  derivative: external_exports.string().min(1),
+  reason: external_exports.string().trim().min(1)
+});
 var referencesConfigSchema = external_exports.strictObject({
-  sources: external_exports.array(referenceSourceSchema).default([])
+  sources: external_exports.array(referenceSourceSchema).default([]),
+  copies: external_exports.array(copyRelationshipSchema).default([])
 });
 var configSchema = external_exports.strictObject({
   /** Human-output voice; JSON output never carries persona strings. */
@@ -53932,6 +53938,37 @@ function headingText(heading2) {
   });
   return parts.join("");
 }
+function proseText(node2) {
+  const parts = [];
+  visit(node2, (child) => {
+    if (child.type === "text" || child.type === "inlineCode") parts.push(child.value);
+  });
+  return parts.join(" ");
+}
+function normalizeProseBlock(value) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+function normalizeCodeBlock(value) {
+  return value.replace(/\r\n?/g, "\n");
+}
+function substantiveBlocks(tree) {
+  const blocks = [];
+  const record2 = (value) => {
+    if (value.length >= 40) blocks.push(value);
+  };
+  visit(tree, (node2, _index, parent) => {
+    if (node2.type === "paragraph" && parent?.type !== "listItem") {
+      record2(normalizeProseBlock(proseText(node2)));
+    } else if (node2.type === "listItem") {
+      record2(normalizeProseBlock(proseText(node2)));
+    } else if (node2.type === "tableRow") {
+      record2(normalizeProseBlock(proseText(node2)));
+    } else if (node2.type === "code") {
+      record2(normalizeCodeBlock(node2.value));
+    }
+  });
+  return blocks;
+}
 function structureFromTree(tree) {
   let title = null;
   const headings = [];
@@ -53943,7 +53980,7 @@ function structureFromTree(tree) {
       headings.push(text5);
     }
   });
-  return { title, headings };
+  return { title, headings, blocks: substantiveBlocks(tree) };
 }
 function extractReferences(fromPath, tree, filePaths) {
   const definitions = /* @__PURE__ */ new Map();
@@ -54065,38 +54102,43 @@ function compareDocStructures(a, b) {
   }
   return null;
 }
-function evidenceFor(title, match, counterpartPath) {
-  switch (match.kind) {
-    case "identical-headings":
-      return {
-        rule: "duplicate-title-and-headings",
-        confidence: "STRONG",
-        rationale: `same title "${title}" and identical headings as "${counterpartPath}"`
-      };
-    case "overlapping-headings":
-      return {
-        rule: "duplicate-title-overlapping-headings",
-        confidence: "STRONG",
-        rationale: `same title "${title}" as "${counterpartPath}", sharing ${match.shared} of its headings`
-      };
-    case "title-only":
-      return {
-        rule: "duplicate-title",
-        confidence: "WEAK",
-        rationale: `same title "${title}" as "${counterpartPath}" (no headings to compare)`
-      };
+function compareDocContent(a, b) {
+  const smaller = a.blocks.length <= b.blocks.length ? a.blocks : b.blocks;
+  const larger = a.blocks.length <= b.blocks.length ? b.blocks : a.blocks;
+  if (smaller.length === 0) return null;
+  const unmatched = /* @__PURE__ */ new Map();
+  for (const block of larger) unmatched.set(block, (unmatched.get(block) ?? 0) + 1);
+  let matchingBlocks = 0;
+  for (const block of smaller) {
+    const count = unmatched.get(block) ?? 0;
+    if (count > 0) {
+      matchingBlocks++;
+      unmatched.set(block, count - 1);
+    }
   }
+  const containment = matchingBlocks / smaller.length;
+  return matchingBlocks >= 3 && containment >= 0.8 ? { matchingBlocks, containment } : null;
+}
+function isDeclaredCopyPair(a, b, ctx) {
+  return ctx.references.copyRelationships.some(
+    (copy) => copy.canonical === a && copy.derivative === b || copy.canonical === b && copy.derivative === a
+  );
 }
 var echoDetector = {
   label: "ECHO",
   examine(entry, ctx) {
     const own6 = docStructureOf(ctx.docGraph, entry.path);
-    if (own6 === null || own6.title === null) return [];
+    if (own6 === null) return [];
     const evidence = [];
     for (const [counterpartPath, other] of allDocStructures(ctx.docGraph)) {
       if (counterpartPath === entry.path) continue;
-      const match = compareDocStructures(own6, other);
-      if (match !== null) evidence.push(evidenceFor(own6.title, match, counterpartPath));
+      if (isDeclaredCopyPair(entry.path, counterpartPath, ctx)) continue;
+      const match = compareDocContent(own6, other);
+      if (match !== null) evidence.push({
+        rule: "substantive-content-overlap",
+        confidence: "STRONG",
+        rationale: `${match.matchingBlocks} substantive blocks overlap with "${counterpartPath}" (${Math.round(match.containment * 100)}% containment of the smaller document)`
+      });
     }
     return evidence;
   }
@@ -55805,9 +55847,11 @@ function targetPath(sourcePath, target, resolveFrom) {
 }
 async function buildConfiguredAssertions(repoRoot, entries, config2) {
   const inventory = new Set(entries.map((entry) => entry.path));
+  const entryByPath = new Map(entries.map((entry) => [entry.path, entry]));
   const assertions = [];
   const broken = [];
   const diagnostics = [];
+  const copyRelationships = [];
   const record2 = (definition3, sourcePath, selector, raw, line) => {
     if (typeof raw !== "string") {
       diagnostics.push({ code: "non-string-match", source: definition3.name, path: sourcePath, selector, message: `selector ${selector} matched a non-string value` });
@@ -55877,8 +55921,21 @@ async function buildConfiguredAssertions(repoRoot, entries, config2) {
       }
     }
   }
+  for (const [index2, relationship] of config2.references.copies.entries()) {
+    const selector = `references.copies.${index2}`;
+    const invalid2 = [relationship.canonical, relationship.derivative].filter((target) => entryByPath.get(target)?.kind !== "doc");
+    if (invalid2.length > 0) {
+      for (const target of invalid2) {
+        const exists = inventory.has(target);
+        broken.push({ type: "reference", path: "gunk.config.json", target, source: "copy-relationship", selector, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: exists ? `copy relationship target "${target}" is not a document` : `copy relationship target "${target}" does not exist` }] });
+      }
+      continue;
+    }
+    assertions.push({ source: "copy-relationship", sourcePath: "gunk.config.json", selector, target: relationship.derivative });
+    copyRelationships.push({ canonical: relationship.canonical, derivative: relationship.derivative });
+  }
   const retained = deduplicateAssertions(assertions);
-  return { assertions: retained, referenced: new Set(retained.map((a) => a.target)), broken, diagnostics };
+  return { assertions: retained, referenced: new Set(retained.map((a) => a.target)), broken, diagnostics, copyRelationships };
 }
 
 // src/reference-graphs.ts
@@ -55958,7 +56015,7 @@ async function buildReferenceGraphs(repoRoot, fileIndex, docGraph) {
   }
   const retained = deduplicateAssertions(assertions);
   const referenced = new Set(retained.map((assertion) => assertion.target));
-  return { agentContextReferenced, packageScriptReferenced, ciReferenced, assertions: retained, referenced };
+  return { agentContextReferenced, packageScriptReferenced, ciReferenced, assertions: retained, referenced, copyRelationships: [] };
 }
 function assertionsFromMentions(source, sourcePath, selector, text5, candidatePaths, startingLine = 1, fixedLocation = false) {
   const normalized = normalizeText2(text5);
@@ -56024,7 +56081,8 @@ async function scan(repoRoot, config2) {
   const references = {
     ...builtInReferences,
     assertions,
-    referenced: new Set(assertions.map((assertion) => assertion.target))
+    referenced: new Set(assertions.map((assertion) => assertion.target)),
+    copyRelationships: configuredReferences.copyRelationships
   };
   const contents = await readDocContents(root2, fileIndex);
   const hashedFindings = await withContentHashes(

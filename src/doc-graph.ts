@@ -63,6 +63,8 @@ export interface DocStructure {
   title: string | null;
   /** Texts of every other heading, in document order (the title heading excluded). */
   headings: readonly string[];
+  /** Normalized substantive body blocks used as ECHO evidence. */
+  blocks: readonly string[];
 }
 
 export interface DocGraph {
@@ -232,6 +234,41 @@ function headingText(heading: Heading): string {
 }
 
 /** Pull the title/heading skeleton out of a parsed markdown tree. */
+function proseText(node: Root["children"][number]): string {
+  const parts: string[] = [];
+  visit(node, (child) => {
+    if (child.type === "text" || child.type === "inlineCode") parts.push((child as { value: string }).value);
+  });
+  return parts.join(" ");
+}
+
+function normalizeProseBlock(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeCodeBlock(value: string): string {
+  return value.replace(/\r\n?/g, "\n");
+}
+
+function substantiveBlocks(tree: Root): string[] {
+  const blocks: string[] = [];
+  const record = (value: string): void => {
+    if (value.length >= 40) blocks.push(value);
+  };
+  visit(tree, (node, _index, parent) => {
+    if (node.type === "paragraph" && parent?.type !== "listItem") {
+      record(normalizeProseBlock(proseText(node)));
+    } else if (node.type === "listItem") {
+      record(normalizeProseBlock(proseText(node)));
+    } else if (node.type === "tableRow") {
+      record(normalizeProseBlock(proseText(node)));
+    } else if (node.type === "code") {
+      record(normalizeCodeBlock((node as Code).value));
+    }
+  });
+  return blocks;
+}
+
 function structureFromTree(tree: Root): DocStructure {
   let title: string | null = null;
   const headings: string[] = [];
@@ -245,7 +282,7 @@ function structureFromTree(tree: Root): DocStructure {
     }
   });
 
-  return { title, headings };
+  return { title, headings, blocks: substantiveBlocks(tree) };
 }
 
 /**

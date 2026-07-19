@@ -40,7 +40,7 @@ describe("loadConfig(repoRoot)", () => {
       verify: {
         commands: [],
       },
-      references: { sources: [] },
+      references: { sources: [], copies: [] },
     });
     expect(existsSync(path.join(dir, CONFIG_FILE_NAME))).toBe(false);
   });
@@ -72,7 +72,7 @@ describe("loadConfig(repoRoot)", () => {
       verify: {
         commands: [],
       },
-      references: { sources: [] },
+      references: { sources: [], copies: [] },
     });
   });
 
@@ -164,6 +164,18 @@ describe("loadConfig(repoRoot)", () => {
 
     await writeFile(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ references: { sources: [{
       name: "text", files: ["registry.txt"], format: "text", regex: "^(.+)$", resolveFrom: "source-directory",
+    }] } }));
+    await expect(loadConfig(dir)).rejects.toBeInstanceOf(GunkError);
+  });
+
+  it("accepts copy relationships with a required reason and rejects incomplete ones", async () => {
+    await writeFile(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ references: { copies: [{
+      canonical: "docs/current.md", derivative: "docs/archive.md", reason: "release snapshot",
+    }] } }));
+    expect((await loadConfig(dir)).references.copies).toHaveLength(1);
+
+    await writeFile(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ references: { copies: [{
+      canonical: "docs/current.md", derivative: "docs/archive.md", reason: " ",
     }] } }));
     await expect(loadConfig(dir)).rejects.toBeInstanceOf(GunkError);
   });

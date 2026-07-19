@@ -36,6 +36,8 @@ export interface ReferenceGraphs {
   ciReferenced: ReadonlySet<string>;
   assertions: readonly ReferenceAssertion[];
   referenced: ReadonlySet<string>;
+  /** Valid Chief-declared canonical/derivative pairs, which alone suppress ECHO. */
+  copyRelationships: readonly import("./reference-assertions.js").ValidCopyRelationship[];
 }
 
 /**
@@ -159,7 +161,7 @@ export async function buildReferenceGraphs(
   const retained = deduplicateAssertions(assertions);
   const referenced = new Set(retained.map((assertion) => assertion.target));
 
-  return { agentContextReferenced, packageScriptReferenced, ciReferenced, assertions: retained, referenced };
+  return { agentContextReferenced, packageScriptReferenced, ciReferenced, assertions: retained, referenced, copyRelationships: [] };
 }
 
 function assertionsFromMentions(source: string, sourcePath: string, selector: string, text: string, candidatePaths: readonly string[], startingLine = 1, fixedLocation = false): ReferenceAssertion[] {

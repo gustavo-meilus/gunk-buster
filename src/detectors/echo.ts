@@ -4,14 +4,9 @@ import type { Evidence } from "../schema.js";
 
 /**
  * ECHO — a duplicate of another doc: competing copies of the same guidance.
- * Detection is title/heading similarity over the doc graph — fuzzy content
- * hashing is explicitly out of MVP 1 scope. Both duplicates are reported
- * (which one survives is MVP 3's business); each finding's evidence
- * rationale names the counterpart path.
- *
- * ECHO evidence is never CERTAIN: content is never compared, and both
- * copies of a pair get the same evidence — a CERTAIN (SAFE) verdict on both
- * would let a later batch trap remove every copy of the guidance at once.
+ * It requires substantial normalized body-content overlap. Both sides of an
+ * undeclared duplicate pair are reported; a Chief-declared copy relationship
+ * suppresses only that exact canonical/derivative pair.
  */
 
 /** Case- and whitespace-insensitive comparison key for titles and headings. */
@@ -20,7 +15,8 @@ function normalizeText(text: string): string {
 }
 
 /**
- * How strongly two same-title docs echo each other:
+ * How strongly two same-title docs structurally resemble each other. This is
+ * retained for Radar's context-bloat check; it is not ECHO evidence.
  *
  * - "identical-headings" — same title, same heading set: the strongest
  *   structural match this detector can make (STRONG evidence).
@@ -35,9 +31,8 @@ export type EchoMatch =
   | { kind: "title-only" };
 
 /**
- * Compare two doc structures for duplication. Pure — exported so the
- * similarity rules can be unit-tested directly where the engine seam is too
- * coarse. Returns null when the docs are not duplicates of each other.
+ * Compare two doc heading structures. Pure — exported for the context-bloat
+ * check, where the engine seam is too coarse.
  *
  * A shared title is always required; with no title match there is no ECHO.
  * Docs sharing only a generic title (e.g. "Setup") are protected from
@@ -74,42 +69,55 @@ export function compareDocStructures(a: DocStructure, b: DocStructure): EchoMatc
   return null;
 }
 
-function evidenceFor(title: string, match: EchoMatch, counterpartPath: string): Evidence {
-  switch (match.kind) {
-    case "identical-headings":
-      return {
-        rule: "duplicate-title-and-headings",
-        confidence: "STRONG",
-        rationale: `same title "${title}" and identical headings as "${counterpartPath}"`,
-      };
-    case "overlapping-headings":
-      return {
-        rule: "duplicate-title-overlapping-headings",
-        confidence: "STRONG",
-        rationale: `same title "${title}" as "${counterpartPath}", sharing ${match.shared} of its headings`,
-      };
-    case "title-only":
-      return {
-        rule: "duplicate-title",
-        confidence: "WEAK",
-        rationale: `same title "${title}" as "${counterpartPath}" (no headings to compare)`,
-      };
+export interface EchoContentMatch {
+  matchingBlocks: number;
+  containment: number;
+}
+
+/** Compare substantive normalized body blocks; headings only nominate, never prove ECHO. */
+export function compareDocContent(a: DocStructure, b: DocStructure): EchoContentMatch | null {
+  const smaller = a.blocks.length <= b.blocks.length ? a.blocks : b.blocks;
+  const larger = a.blocks.length <= b.blocks.length ? b.blocks : a.blocks;
+  if (smaller.length === 0) return null;
+
+  const unmatched = new Map<string, number>();
+  for (const block of larger) unmatched.set(block, (unmatched.get(block) ?? 0) + 1);
+  let matchingBlocks = 0;
+  for (const block of smaller) {
+    const count = unmatched.get(block) ?? 0;
+    if (count > 0) {
+      matchingBlocks++;
+      unmatched.set(block, count - 1);
+    }
   }
+  const containment = matchingBlocks / smaller.length;
+  return matchingBlocks >= 3 && containment >= 0.8 ? { matchingBlocks, containment } : null;
+}
+
+function isDeclaredCopyPair(a: string, b: string, ctx: Parameters<Detector["examine"]>[1]): boolean {
+  return ctx.references.copyRelationships.some((copy) =>
+    ((copy.canonical === a && copy.derivative === b) || (copy.canonical === b && copy.derivative === a)),
+  );
 }
 
 export const echoDetector: Detector = {
   label: "ECHO",
   examine(entry, ctx) {
     const own = docStructureOf(ctx.docGraph, entry.path);
-    if (own === null || own.title === null) return [];
+    if (own === null) return [];
 
     const evidence: Evidence[] = [];
 
     for (const [counterpartPath, other] of allDocStructures(ctx.docGraph)) {
       if (counterpartPath === entry.path) continue;
 
-      const match = compareDocStructures(own, other);
-      if (match !== null) evidence.push(evidenceFor(own.title, match, counterpartPath));
+      if (isDeclaredCopyPair(entry.path, counterpartPath, ctx)) continue;
+      const match = compareDocContent(own, other);
+      if (match !== null) evidence.push({
+        rule: "substantive-content-overlap",
+        confidence: "STRONG",
+        rationale: `${match.matchingBlocks} substantive blocks overlap with "${counterpartPath}" (${Math.round(match.containment * 100)}% containment of the smaller document)`,
+      });
     }
 
     return evidence;

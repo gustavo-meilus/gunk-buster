@@ -122,6 +122,12 @@ Gunk Buster is zero-config. When present, `gunk.config.json` may adjust:
 - `verify.commands`;
 - output `voice`: `chief` or `professional`.
 
+`references.copies` declares intentional document derivatives. Each entry has
+`canonical`, `derivative`, and a non-empty `reason`. When both paths exist, it
+proves only the derivative live and suppresses ECHO only for that declared
+pair. A missing endpoint is reported as a broken reference; it grants neither
+liveness nor suppression.
+
 The repository's current [configuration](../gunk.config.json) is a useful example of excluding fixtures, raw reference material, specs, and agent-process docs from Radar while preserving them in Git.
 
 ## Persistent files

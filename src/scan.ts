@@ -119,6 +119,7 @@ export async function scan(
     ...builtInReferences,
     assertions,
     referenced: new Set(assertions.map((assertion) => assertion.target)),
+    copyRelationships: configuredReferences.copyRelationships,
   };
   const contents = await readDocContents(root, fileIndex);
 
