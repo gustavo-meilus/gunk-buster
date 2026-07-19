@@ -51,9 +51,28 @@ export const linkFindingSchema = z.object({
   evidence: z.array(evidenceSchema),
 });
 
+export const brokenReferenceFindingSchema = z.object({
+  type: z.literal("reference"),
+  path: z.string(),
+  target: z.string(),
+  source: z.string(),
+  selector: z.string(),
+  line: z.int().positive().optional(),
+  evidence: z.array(evidenceSchema),
+});
+
+export const referenceDiagnosticSchema = z.object({
+  code: z.enum(["source-glob-empty", "malformed-source", "unevaluable-selector", "non-string-match"]),
+  source: z.string(),
+  path: z.string().optional(),
+  selector: z.string().optional(),
+  message: z.string(),
+});
+
 export const findingSchema = z.discriminatedUnion("type", [
   fileFindingSchema,
   linkFindingSchema,
+  brokenReferenceFindingSchema,
 ]);
 
 export const scanResultSchema = z.object({
@@ -65,6 +84,7 @@ export const scanResultSchema = z.object({
     byLabel: z.partialRecord(z.enum(LABELS), z.int().nonnegative()),
   }),
   findings: z.array(findingSchema),
+  diagnostics: z.array(referenceDiagnosticSchema).optional(),
 });
 
 /**
@@ -286,6 +306,8 @@ export type ClaimLabel = (typeof CLAIM_LABELS)[number];
 export type Evidence = z.infer<typeof evidenceSchema>;
 export type FileFinding = z.infer<typeof fileFindingSchema>;
 export type LinkFinding = z.infer<typeof linkFindingSchema>;
+export type BrokenReferenceFinding = z.infer<typeof brokenReferenceFindingSchema>;
+export type ReferenceDiagnostic = z.infer<typeof referenceDiagnosticSchema>;
 export type Finding = z.infer<typeof findingSchema>;
 export type ScanResult = z.infer<typeof scanResultSchema>;
 export type Suggestion = z.infer<typeof suggestionSchema>;

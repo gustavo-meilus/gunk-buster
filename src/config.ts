@@ -56,6 +56,36 @@ export const verifyConfigSchema = z.strictObject({
   commands: z.array(z.string()).default([]),
 });
 
+const commonReferenceSource = {
+  name: z.string().min(1),
+  files: z.array(z.string().min(1)).min(1),
+  resolveFrom: z.enum(["source-directory", "repository-root"]),
+};
+
+const structuredReferenceSourceSchema = z.strictObject({
+  ...commonReferenceSource,
+  format: z.enum(["json", "yaml"]),
+  selectors: z.array(z.string().regex(/^(?:[A-Za-z_][A-Za-z0-9_-]*|\d+|\*)(?:\.(?:[A-Za-z_][A-Za-z0-9_-]*|\d+|\*))*$/, "only named properties, array indices, and * are supported")).min(1),
+});
+
+const textReferenceSourceSchema = z.strictObject({
+  ...commonReferenceSource,
+  format: z.literal("text"),
+  regex: z.string().refine((value) => {
+    try { return new RegExp(value).exec("")?.groups?.target !== undefined || /\(\?<target>/.test(value); }
+    catch { return false; }
+  }, "must be a valid regular expression with a named target capture"),
+});
+
+export const referenceSourceSchema = z.discriminatedUnion("format", [
+  structuredReferenceSourceSchema,
+  textReferenceSourceSchema,
+]);
+
+export const referencesConfigSchema = z.strictObject({
+  sources: z.array(referenceSourceSchema).default([]),
+});
+
 // strictObject: an unknown knob (e.g. a typo) is a tool error, never
 // silently dropped — same strictness as an invalid value.
 export const configSchema = z.strictObject({
@@ -73,6 +103,7 @@ export const configSchema = z.strictObject({
   trap: trapConfigSchema.default(() => trapConfigSchema.parse({})),
   /** Verify (MVP 3) configuration. */
   verify: verifyConfigSchema.default(() => verifyConfigSchema.parse({})),
+  references: referencesConfigSchema.default(() => referencesConfigSchema.parse({})),
 });
 
 export type GunkConfig = z.infer<typeof configSchema>;

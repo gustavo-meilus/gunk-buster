@@ -1,1 +1,1 @@
-Setup steps are in docs/from-agents-dir.md.
+Setup steps are in `/docs/from-agents-dir.md`.

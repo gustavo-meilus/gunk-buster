@@ -1,1 +1,1 @@
-This skill references docs/from-claude-dir.md.
+This skill references `/docs/from-claude-dir.md`.

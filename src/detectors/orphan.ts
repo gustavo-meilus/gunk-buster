@@ -54,9 +54,7 @@ export function unreferencedEvidence(entry: FileEntry, ctx: DetectorContext): Ev
     hasInboundFromOthers(docGraph.inboundImages, entry) ||
     docGraph.navReferenced.has(entry.path) ||
     docGraph.readmeReferenced.has(entry.path) ||
-    references.agentContextReferenced.has(entry.path) ||
-    references.packageScriptReferenced.has(entry.path) ||
-    references.ciReferenced.has(entry.path);
+    references.referenced.has(entry.path);
   if (referenced) return [];
 
   return [

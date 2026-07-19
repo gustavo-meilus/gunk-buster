@@ -1,1 +1,1 @@
-Opencode reads docs/from-opencode-dir.md.
+Opencode reads `/docs/from-opencode-dir.md`.

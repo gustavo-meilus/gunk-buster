@@ -1,1 +1,1 @@
-Copilot should read docs/from-copilot-instructions.md.
+Copilot should read `/docs/from-copilot-instructions.md`.

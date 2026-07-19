@@ -49,6 +49,7 @@ describe("scan(repoRoot, config) — engine seam", () => {
           "byLabel": {},
           "byVerdict": {},
         },
+        "diagnostics": [],
         "findings": [],
         "repoRoot": "<repoRoot>",
         "scannedAt": "<scannedAt>",

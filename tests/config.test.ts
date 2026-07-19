@@ -40,6 +40,7 @@ describe("loadConfig(repoRoot)", () => {
       verify: {
         commands: [],
       },
+      references: { sources: [] },
     });
     expect(existsSync(path.join(dir, CONFIG_FILE_NAME))).toBe(false);
   });
@@ -71,6 +72,7 @@ describe("loadConfig(repoRoot)", () => {
       verify: {
         commands: [],
       },
+      references: { sources: [] },
     });
   });
 
@@ -151,6 +153,18 @@ describe("loadConfig(repoRoot)", () => {
       path.join(dir, CONFIG_FILE_NAME),
       JSON.stringify({ voice: "sarcastic" }),
     );
+    await expect(loadConfig(dir)).rejects.toBeInstanceOf(GunkError);
+  });
+
+  it("accepts declarative reference sources and rejects text without a named target capture", async () => {
+    await writeFile(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ references: { sources: [{
+      name: "registry", files: ["registry.json"], format: "json", selectors: ["agents.*.path"], resolveFrom: "repository-root",
+    }] } }));
+    expect((await loadConfig(dir)).references.sources).toHaveLength(1);
+
+    await writeFile(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({ references: { sources: [{
+      name: "text", files: ["registry.txt"], format: "text", regex: "^(.+)$", resolveFrom: "source-directory",
+    }] } }));
     await expect(loadConfig(dir)).rejects.toBeInstanceOf(GunkError);
   });
 });

@@ -1,1 +1,1 @@
-Read docs/from-agents-md.md first.
+Read `docs/from-agents-md.md` first.

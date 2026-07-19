@@ -1,6 +1,7 @@
 import path from "node:path";
-import type { Definition, Heading, Image, ImageReference, Link, LinkReference, Root } from "mdast";
+import type { Code, Definition, Heading, Image, ImageReference, InlineCode, Link, LinkReference, Root, TableCell } from "mdast";
 import { remark } from "remark";
+import remarkGfm from "remark-gfm";
 import { visit } from "unist-util-visit";
 import { DOC_EXTENSIONS, readIndexedFile, type FileEntry } from "./file-index.js";
 import type { LinkFinding } from "./schema.js";
@@ -79,6 +80,8 @@ export interface DocGraph {
   readmeReferenced: ReadonlySet<string>;
   /** repo-relative paths referenced from a recognized nav/sidebar file. */
   navReferenced: ReadonlySet<string>;
+  /** Resolved path-only mentions from code spans, fenced blocks, and table cells. */
+  explicitMentions: readonly import("./document-path.js").DocumentPathReference[];
 }
 
 /** Recognized docs nav/sidebar file basenames (mdbook/gitbook SUMMARY, docsify sidebar). */
@@ -185,6 +188,34 @@ export function resolveReference(
 
 }
 
+function parseMarkdown(content: string): Root {
+  return remark().use(remarkGfm).parse(content) as Root;
+}
+
+function extractExplicitMentions(fromPath: string, tree: Root, filePaths: ReadonlySet<string>): import("./document-path.js").DocumentPathReference[] {
+  const inventory = repositoryInventory(filePaths);
+  const mentions: import("./document-path.js").DocumentPathReference[] = [];
+  const record = (token: string, line: number): void => {
+    const reference = resolveDocumentPath(fromPath, token, line, inventory);
+    if (reference !== null) mentions.push(reference);
+  };
+  visit(tree, (node) => {
+    if (node.type === "inlineCode") {
+      const inline = node as InlineCode;
+      record(inline.value, inline.position?.start.line ?? 1);
+    } else if (node.type === "code") {
+      const code = node as Code;
+      code.value.split(/\r?\n/).forEach((line, index) => record(line, (code.position?.start.line ?? 1) + index + 1));
+    } else if (node.type === "tableCell") {
+      const cell = node as TableCell;
+      const values: string[] = [];
+      visit(cell, (child) => { if (child.type === "text" || child.type === "inlineCode") values.push((child as { value: string }).value); });
+      record(values.join(""), cell.position?.start.line ?? 1);
+    }
+  });
+  return mentions;
+}
+
 /**
  * The visible text of one heading node: its text and inline-code children,
  * concatenated in order. Emphasis/strong wrappers contribute their inner
@@ -225,7 +256,7 @@ function structureFromTree(tree: Root): DocStructure {
  * that.
  */
 export function extractDocStructure(content: string): DocStructure {
-  return structureFromTree(remark().parse(content) as Root);
+  return structureFromTree(parseMarkdown(content));
 }
 
 /** Parse one document's markdown tree into its outbound references (links, images, and reference-style variants of both). */
@@ -290,14 +321,16 @@ export async function buildDocGraph(
   const references: DocReference[] = [];
   const outbound = new Map<string, readonly DocReference[]>();
   const structures = new Map<string, DocStructure>();
+  const explicitMentions: import("./document-path.js").DocumentPathReference[] = [];
 
   for (const entry of parsable) {
     const content = await readIndexedFile(repoRoot, entry.path);
-    const tree = remark().parse(content) as Root;
+    const tree = parseMarkdown(content);
     const refs = extractReferences(entry.path, tree, filePaths);
     outbound.set(entry.path, refs);
     references.push(...refs);
     structures.set(entry.path, structureFromTree(tree));
+    explicitMentions.push(...extractExplicitMentions(entry.path, tree, filePaths));
   }
 
   const inboundLinks = new Map<string, Set<string>>();
@@ -325,6 +358,7 @@ export async function buildDocGraph(
     inboundImages,
     readmeReferenced,
     navReferenced,
+    explicitMentions,
   };
 }
 

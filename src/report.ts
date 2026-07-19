@@ -55,8 +55,10 @@ function findingLine(finding: PileFinding): string[] {
     lines.push(
       `- \`${finding.path}:${finding.line}\` — expected \`${finding.expected}\`, found \`${finding.actual}\``,
     );
-  } else {
+  } else if (finding.type === "link") {
     lines.push(`- \`${finding.path}\` -> \`${finding.target}\` (broken link)`);
+  } else {
+    lines.push(`- \`${finding.path}\` -> \`${finding.target}\` (broken reference via ${finding.source} / ${finding.selector})`);
   }
   for (const evidence of finding.evidence) {
     lines.push(`  - ${evidence.rule} (${evidence.confidence}): ${evidence.rationale}`);

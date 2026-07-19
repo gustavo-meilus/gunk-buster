@@ -15,6 +15,7 @@ import { resolveRepoRoot } from "./git.js";
 import { GUNK_BUSTER_GITIGNORE } from "./gunk-buster-dir.js";
 import { loadKeeps } from "./keeps.js";
 import { buildReferenceGraphs } from "./reference-graphs.js";
+import { buildConfiguredAssertions, deduplicateAssertions } from "./reference-assertions.js";
 import { scanResultSchema, type FileFinding, type KeepEntry, type ScanResult } from "./schema.js";
 
 /** Every detector the scan runs, in registration order. */
@@ -110,7 +111,15 @@ export async function scan(
   const fileIndex = await buildFileIndex(root);
   const gitIndex = await buildGitIndex(root);
   const docGraph = await buildDocGraph(root, fileIndex, new Set(gitIndex.keys()));
-  const references = await buildReferenceGraphs(root, fileIndex, docGraph);
+  const builtInReferences = await buildReferenceGraphs(root, fileIndex, docGraph);
+  const configuredReferences = await buildConfiguredAssertions(root, fileIndex, effectiveConfig);
+  const allAssertions = [...builtInReferences.assertions, ...configuredReferences.assertions];
+  const assertions = deduplicateAssertions(allAssertions);
+  const references = {
+    ...builtInReferences,
+    assertions,
+    referenced: new Set(assertions.map((assertion) => assertion.target)),
+  };
   const contents = await readDocContents(root, fileIndex);
 
   const hashedFindings = await withContentHashes(
@@ -129,7 +138,8 @@ export async function scan(
     scannedAt: new Date().toISOString(),
     repoRoot: root,
     counts: summarizeCounts(fileFindings),
-    findings: [...fileFindings, ...linkFindings],
+    findings: [...fileFindings, ...linkFindings, ...configuredReferences.broken],
+    diagnostics: configuredReferences.diagnostics,
   });
 }
 

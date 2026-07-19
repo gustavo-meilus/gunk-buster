@@ -1,6 +1,8 @@
 import path from "node:path";
+import { parse as parseJsonWithPointers } from "json-source-map";
 import { outboundReferencesOf, type DocGraph } from "./doc-graph.js";
-import { readIndexedFile, type FileEntry } from "./file-index.js";
+import { DOC_EXTENSIONS, readIndexedFile, type FileEntry } from "./file-index.js";
+import { deduplicateAssertions, type ReferenceAssertion } from "./reference-assertions.js";
 
 /**
  * Reference graphs 4–6 of the scan (see docs/specs/mvp-1-scan.md): the
@@ -32,6 +34,8 @@ export interface ReferenceGraphs {
   packageScriptReferenced: ReadonlySet<string>;
   /** Repo-relative paths mentioned by any CI workflow file. */
   ciReferenced: ReadonlySet<string>;
+  assertions: readonly ReferenceAssertion[];
+  referenced: ReadonlySet<string>;
 }
 
 /**
@@ -45,33 +49,26 @@ export interface ReferenceGraphs {
  * a false orphan is the trust-killing kind of mistake.
  */
 export function mentionsPath(text: string, relPath: string): boolean {
+  return mentionLocations(text, relPath).length > 0;
+}
+
+function mentionLocations(text: string, relPath: string): number[] {
   const wordish = /[A-Za-z0-9_-]/;
+  const locations: number[] = [];
   let index = text.indexOf(relPath);
   while (index !== -1) {
     const before = index === 0 ? "" : (text[index - 1] as string);
     const after =
       index + relPath.length >= text.length ? "" : (text[index + relPath.length] as string);
-    if (!wordish.test(before) && !wordish.test(after)) return true;
+    if (!wordish.test(before) && !wordish.test(after)) locations.push(index);
     index = text.indexOf(relPath, index + 1);
   }
-  return false;
+  return locations;
 }
 
 /** Backslash-authored mentions ("docs\guide.md") should match the index's forward-slash paths. */
 function normalizeText(text: string): string {
   return text.replace(/\\/g, "/");
-}
-
-function addMentions(
-  text: string,
-  candidatePaths: readonly string[],
-  into: Set<string>,
-): void {
-  const normalized = normalizeText(text);
-  for (const candidate of candidatePaths) {
-    if (into.has(candidate)) continue;
-    if (mentionsPath(normalized, candidate)) into.add(candidate);
-  }
 }
 
 function isWorkflowFile(relPath: string): boolean {
@@ -84,36 +81,38 @@ function isWorkflowFile(relPath: string): boolean {
  * Collect every path mentioned by `package.json` scripts, as repo-relative
  * mentions (MVP 1 is a single-package world — ADR-0003 — so scripts run
  * from the repo root; per-package relative resolution can land with
- * workspaces in MVP 4 if ever needed). A file that is not valid JSON
- * degrades to a plain mention scan of its raw text — still no crash, and
- * erring toward "referenced".
+ * workspaces in MVP 4 if ever needed). Invalid JSON emits no assertions;
+ * built-in sources never fall back to scanning malformed raw text.
  */
 async function packageScriptMentions(
   repoRoot: string,
   packageJsonPath: string,
   candidatePaths: readonly string[],
   into: Set<string>,
+  assertions: ReferenceAssertion[],
 ): Promise<void> {
   const raw = await readIndexedFile(repoRoot, packageJsonPath);
 
   let scripts: Record<string, unknown>;
+  let pointers: ReturnType<typeof parseJsonWithPointers>["pointers"];
   try {
-    const parsed: unknown = JSON.parse(raw);
+    const sourceMap = parseJsonWithPointers(raw);
+    const parsed = sourceMap.data;
+    pointers = sourceMap.pointers;
     scripts =
       typeof parsed === "object" && parsed !== null
         ? ((parsed as { scripts?: Record<string, unknown> }).scripts ?? {})
         : {};
   } catch {
-    addMentions(raw, candidatePaths, into); // unparseable manifest — fall back to text scan
+    // Invalid built-in manifests emit no assertion and never fall back to raw text.
     return;
   }
 
-  const scriptText = Object.values(scripts)
-    .filter((value): value is string => typeof value === "string")
-    .join("\n");
-  if (scriptText === "") return;
-
-  addMentions(scriptText, candidatePaths, into);
+  for (const [name, value] of Object.entries(scripts)) {
+    if (typeof value !== "string") continue;
+    const pointer = `/scripts/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+    retainMentionAssertions(assertionsFromMentions("package-script", packageJsonPath, `scripts.${name}`, value, candidatePaths, (pointers[pointer]?.value.line ?? 0) + 1, true), assertions, into);
+  }
 }
 
 /** Build reference graphs 4–6 for a repo (see module doc). */
@@ -127,25 +126,50 @@ export async function buildReferenceGraphs(
   const agentContextReferenced = new Set<string>();
   const packageScriptReferenced = new Set<string>();
   const ciReferenced = new Set<string>();
+  const assertions: ReferenceAssertion[] = [];
 
   for (const entry of fileIndex) {
     if (entry.kind === "agent-context") {
-      addMentions(
-        await readIndexedFile(repoRoot, entry.path),
-        candidatePaths,
-        agentContextReferenced,
-      );
+      if (!DOC_EXTENSIONS.has(path.posix.extname(entry.path).toLowerCase())) {
+        const text = await readIndexedFile(repoRoot, entry.path);
+        retainMentionAssertions(assertionsFromMentions("agent-context", entry.path, "path", text, candidatePaths), assertions, agentContextReferenced);
+      }
       for (const ref of outboundReferencesOf(docGraph, entry.path)) {
         if (!ref.external && ref.resolved !== null && !ref.broken) {
           agentContextReferenced.add(ref.resolved);
         }
       }
     } else if (path.posix.basename(entry.path) === "package.json") {
-      await packageScriptMentions(repoRoot, entry.path, candidatePaths, packageScriptReferenced);
+      await packageScriptMentions(repoRoot, entry.path, candidatePaths, packageScriptReferenced, assertions);
     } else if (isWorkflowFile(entry.path)) {
-      addMentions(await readIndexedFile(repoRoot, entry.path), candidatePaths, ciReferenced);
+      const text = await readIndexedFile(repoRoot, entry.path);
+      retainMentionAssertions(assertionsFromMentions("ci", entry.path, "path", text, candidatePaths), assertions, ciReferenced);
     }
   }
 
-  return { agentContextReferenced, packageScriptReferenced, ciReferenced };
+  for (const ref of docGraph.references) {
+    if (!ref.external && ref.resolved !== null && !ref.broken) assertions.push({ source: "document", sourcePath: ref.from, selector: ref.kind, location: ref.line, target: ref.resolved });
+  }
+  for (const mention of docGraph.explicitMentions) {
+    if (mention.live) {
+      assertions.push({ source: "document", sourcePath: mention.sourcePath, selector: "explicit-path", location: mention.line, target: mention.resolvedTarget });
+      if (fileIndex.find((entry) => entry.path === mention.sourcePath)?.kind === "agent-context") agentContextReferenced.add(mention.resolvedTarget);
+    }
+  }
+  const retained = deduplicateAssertions(assertions);
+  const referenced = new Set(retained.map((assertion) => assertion.target));
+
+  return { agentContextReferenced, packageScriptReferenced, ciReferenced, assertions: retained, referenced };
+}
+
+function assertionsFromMentions(source: string, sourcePath: string, selector: string, text: string, candidatePaths: readonly string[], startingLine = 1, fixedLocation = false): ReferenceAssertion[] {
+  const normalized = normalizeText(text);
+  return candidatePaths.flatMap((target) => mentionLocations(normalized, target).map((index) => ({
+    source, sourcePath, selector, location: fixedLocation ? startingLine : startingLine + normalized.slice(0, index).split(/\r?\n/).length - 1, target,
+  })));
+}
+
+function retainMentionAssertions(created: readonly ReferenceAssertion[], assertions: ReferenceAssertion[], referenced: Set<string>): void {
+  assertions.push(...created);
+  for (const assertion of created) referenced.add(assertion.target);
 }

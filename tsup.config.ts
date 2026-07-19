@@ -13,6 +13,12 @@ export const mcpOptions: Options = {
   target: "node20",
   platform: "node",
   noExternal: [/.*/],
+  // Bundled CommonJS dependencies (notably YAML's Node build) may require
+  // Node built-ins. Supply ESM's standard require bridge while keeping the
+  // installed single-file MCP artifact dependency-free.
+  banner: {
+    js: 'import { createRequire as __gunkCreateRequire } from "node:module"; const require = __gunkCreateRequire(import.meta.url);',
+  },
   dts: false,
   sourcemap: false,
 };

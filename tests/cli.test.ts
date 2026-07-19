@@ -104,6 +104,24 @@ describe("gunk scan — CLI smoke test", () => {
       await removeDir(dir);
     }
   });
+
+  it("keeps reference diagnostics visible in JSON and human output with advisory exit 0", async () => {
+    const diagnosticRepo = await createFixtureRepo("clean-repo");
+    try {
+      await writeFile(path.join(diagnosticRepo, "gunk.config.json"), JSON.stringify({ references: { sources: [{
+        name: "missing-registry", files: ["registries/*.json"], format: "json", selectors: ["agents.*"], resolveFrom: "repository-root",
+      }] } }));
+      const json = await runGunk(diagnosticRepo, "scan", "--json");
+      expect(json.exitCode).toBe(0);
+      expect(scanResultSchema.parse(JSON.parse(json.stdout)).diagnostics).toContainEqual(expect.objectContaining({ code: "source-glob-empty", source: "missing-registry" }));
+
+      const human = await runGunk(diagnosticRepo, "scan");
+      expect(human.exitCode).toBe(0);
+      expect(human.stdout).toContain("Reference diagnostic [source-glob-empty] missing-registry");
+    } finally {
+      await removeDir(diagnosticRepo);
+    }
+  });
 });
 
 describe("gunk radar — CLI smoke test", () => {

@@ -5,6 +5,7 @@ import {
   fileFindingSchema,
   LABELS,
   linkFindingSchema,
+  brokenReferenceFindingSchema,
   radarResultSchema,
   scanResultSchema,
   VERDICTS,
@@ -75,6 +76,7 @@ export type TrappedRow = z.infer<typeof trappedRowSchema>;
 export const pileFindingSchema = z.discriminatedUnion("type", [
   fileFindingSchema,
   linkFindingSchema,
+  brokenReferenceFindingSchema,
   claimFindingSchema,
   trappedRowSchema,
 ]);
@@ -105,7 +107,7 @@ export type PileGroup = z.infer<typeof pileGroupSchema>;
 export type PileResult = z.infer<typeof pileResultSchema>;
 
 function groupKey(finding: PileFinding): GroupLabel {
-  if (finding.type === "link") return LINK_GROUP_LABEL;
+  if (finding.type === "link" || finding.type === "reference") return LINK_GROUP_LABEL;
   if (finding.type === "trapped") return TRAPPED_GROUP_LABEL;
   return finding.label;
 }

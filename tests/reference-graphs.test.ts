@@ -32,6 +32,22 @@ describe("mentionsPath(text, relPath) — path-token mention matching", () => {
   });
 });
 
+describe("built-in assertion provenance (#54)", () => {
+  it("locates package-script assertions on their actual package.json line", async () => {
+    const repo = await createFixtureRepo("reference-surface", { commitDate: NINETY_DAYS_AGO });
+    try {
+      const fileIndex = await buildFileIndex(repo);
+      const graph = await buildReferenceGraphs(repo, fileIndex, await buildDocGraph(repo, fileIndex));
+      expect(graph.assertions).toContainEqual(expect.objectContaining({
+        source: "package-script", sourcePath: "package.json", selector: "scripts.docs:check",
+        location: 5, target: "docs/script-only.md",
+      }));
+    } finally {
+      await removeDir(repo);
+    }
+  });
+});
+
 describe("buildReferenceGraphs(repoRoot, fileIndex, docGraph) — full agent-context discovery list (#5)", () => {
   let repo: string;
   let graphs: ReferenceGraphs;

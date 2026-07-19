@@ -37,19 +37,21 @@ export function renderScanHuman(voice: Voice, result: ScanResult, scanPath: stri
   const rel = toRepoRelative(result.repoRoot, scanPath);
   const count = pluralFindings(result.findings.length);
 
-  if (voice === "professional") {
-    return [
+  const lines = voice === "professional"
+    ? [
       `Scan complete: ${result.repoRoot}`,
       `${count}.`,
       `Scan index written to ${rel}.`,
-    ].join("\n");
-  }
-
-  return [
+    ]
+    : [
     `Chief, scan's done: ${result.repoRoot}`,
     `${count} on the pile.`,
     `Index stashed at ${rel}.`,
-  ].join("\n");
+  ];
+  for (const diagnostic of result.diagnostics ?? []) {
+    lines.push(`Reference diagnostic [${diagnostic.code}] ${diagnostic.source}: ${diagnostic.message}`);
+  }
+  return lines.join("\n");
 }
 
 export function renderRadarHuman(voice: Voice, result: RadarResult, radarPath: string): string {
