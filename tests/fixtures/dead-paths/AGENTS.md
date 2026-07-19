@@ -29,3 +29,5 @@ FFmpeg expressions are not paths: `scale=iw*min(1920/iw)` and `scale=1920:-2`.
 Numeric ratios are not paths: `16/9` and `4/3`.
 
 Other slash syntax is not a repository claim: `video/mp4` and `@scope/package`.
+
+Machine-local paths are not repository claims: `C:\Users\chief\notes.md` and `\\server\share\notes.md`.

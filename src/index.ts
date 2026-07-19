@@ -20,6 +20,12 @@ export {
   outboundReferencesOf,
 } from "./doc-graph.js";
 export type { DocGraph, DocRefKind, DocReference, DocStructure } from "./doc-graph.js";
+export { repositoryInventory, resolveDocumentPath } from "./document-path.js";
+export type {
+  DocumentPathAnchor,
+  DocumentPathReference,
+  RepositoryInventory,
+} from "./document-path.js";
 export { buildReferenceGraphs, mentionsPath } from "./reference-graphs.js";
 export type { ReferenceGraphs } from "./reference-graphs.js";
 export { GunkError } from "./errors.js";

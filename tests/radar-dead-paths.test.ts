@@ -96,6 +96,12 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
     expect(paths).not.toContain("@scope/package");
   });
 
+  it("skips drive-qualified and UNC machine-local paths", () => {
+    const paths = deadPathFindings(result).map((f) => f.actual);
+    expect(paths).not.toContain("C:\\Users\\chief\\notes.md");
+    expect(paths).not.toContain("\\\\server\\share\\notes.md");
+  });
+
   it("skips a token matching a .gitignore pattern (probable build product, not a claim)", () => {
     const paths = deadPathFindings(result).map((f) => f.actual);
     expect(paths).not.toContain("dist/bundle.js");
@@ -131,6 +137,7 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
   it("resolves unanchored mentions only from the containing document with no root fallback", () => {
     const guideFindings = deadPathFindings(result).filter((f) => f.path === "docs/guide.md");
     expect(guideFindings.map((f) => f.actual)).not.toContain("../src/index.ts");
+    expect(guideFindings.map((f) => f.actual)).not.toContain("..\\src\\index.ts");
     expect(guideFindings.map((f) => f.actual)).toContain("src/index.ts");
   });
 

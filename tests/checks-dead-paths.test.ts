@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  deriveTrackedDirs,
   hasGlobChars,
   hasPlaceholderSyntax,
   hasUrlScheme,
@@ -78,13 +77,3 @@ describe("hasUrlScheme(token) — guard 3", () => {
   });
 });
 
-describe("deriveTrackedDirs(trackedFiles) — tracked-directory derivation", () => {
-  it("derives every ancestor directory of every tracked file", () => {
-    const dirs = deriveTrackedDirs(new Set(["src/components/Button.tsx", "docs/guide.md"]));
-    expect([...dirs].sort()).toEqual(["docs", "src", "src/components"]);
-  });
-
-  it("derives no directories for a root-level tracked file", () => {
-    expect(deriveTrackedDirs(new Set(["README.md"]))).toEqual(new Set());
-  });
-});

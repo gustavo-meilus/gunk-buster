@@ -164,7 +164,7 @@ export function resolveReference(
   const sharedReference = resolveDocumentPath(
     fromPath,
     withoutAnchor,
-    1,
+    line,
     repositoryInventory(filePaths),
     true,
   );
@@ -183,36 +183,6 @@ export function resolveReference(
   }
   return unresolved();
 
-  /* Legacy algorithm retained below temporarily for source compatibility. */
-  const normalizedRaw = withoutAnchor.replace(/\\/g, "/");
-  if (normalizedRaw.endsWith("/")) {
-    return unresolved(); // directory reference, e.g. "docs/" — not a file target
-  }
-
-  const fromDir = path.posix.dirname(fromPath); // "." for a root-level file
-  const joined = normalizedRaw.startsWith("/")
-    ? normalizedRaw.slice(1)
-    : path.posix.join(fromDir === "." ? "" : fromDir, normalizedRaw);
-  const resolved = path.posix.normalize(joined);
-
-  if (resolved === "." || resolved === "") {
-    return unresolved(); // resolves to a directory (e.g. the repo root)
-  }
-  if (resolved === ".." || resolved.startsWith("../")) {
-    return unresolved(); // escapes the repo root — outside the file index, can't be confirmed
-  }
-
-  return {
-    from: fromPath,
-    raw,
-    kind,
-    line,
-    normalizedToken: normalizedRaw,
-    anchorMode: normalizedRaw.startsWith("/") ? "repository" : "document",
-    external: false,
-    resolved,
-    broken: !filePaths.has(resolved),
-  };
 }
 
 /**

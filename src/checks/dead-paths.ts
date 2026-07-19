@@ -1,4 +1,3 @@
-import path from "node:path";
 import type { Code, InlineCode, Root } from "mdast";
 import ignore from "ignore";
 import { remark } from "remark";
@@ -131,40 +130,6 @@ function extractPathMentions(content: string): PathMention[] {
  * Windows-style path), a leading "./" stripped, a trailing "/" stripped
  * (directory mentions), then `path.posix.normalize`d.
  */
-function normalizeToken(raw: string): string {
-  const forward = raw.replace(/\\/g, "/");
-  const withoutDotSlash = forward.startsWith("./") ? forward.slice(2) : forward;
-  const withoutTrailingSlash =
-    withoutDotSlash.length > 1 && withoutDotSlash.endsWith("/")
-      ? withoutDotSlash.slice(0, -1)
-      : withoutDotSlash;
-  return path.posix.normalize(withoutTrailingSlash);
-}
-
-/** Every ancestor directory of a tracked file path ("a/b/c.ts" -> ["a", "a/b"]). */
-function ancestorsOf(filePath: string): string[] {
-  const segments = filePath.split("/");
-  const dirs: string[] = [];
-  for (let i = 1; i < segments.length; i++) {
-    dirs.push(segments.slice(0, i).join("/"));
-  }
-  return dirs;
-}
-
-/**
- * Every directory implied by a set of tracked file paths — git has no
- * separate notion of a tracked directory, so "tracked directory" means "a
- * path prefix of some tracked file." Exported for direct unit testing
- * alongside the guard predicates.
- */
-export function deriveTrackedDirs(trackedFiles: ReadonlySet<string>): Set<string> {
-  const dirs = new Set<string>();
-  for (const file of trackedFiles) {
-    for (const dir of ancestorsOf(file)) dirs.add(dir);
-  }
-  return dirs;
-}
-
 /** Repo-relative targets of this file's broken markdown links — never double-reported as a dead path (spec). */
 function brokenLinkTargetsOf(ctx: RadarContext, filePath: string): ReadonlySet<string> {
   return new Set(
