@@ -31916,7 +31916,7 @@ import { mkdir, readFile as readFile3, writeFile } from "fs/promises";
 import path7 from "path";
 
 // src/doc-graph.ts
-import path3 from "path";
+import path4 from "path";
 
 // node_modules/.pnpm/mdast-util-to-string@4.0.0/node_modules/mdast-util-to-string/lib/index.js
 var emptyOptions = {};
@@ -42049,6 +42049,58 @@ async function buildFileIndex(repoRoot) {
   return entries;
 }
 
+// src/document-path.ts
+import path3 from "path";
+var URI_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]+:/;
+var DRIVE_PATH = /^[A-Za-z]:[\\/]/;
+var UNC_PATH = /^(?:\\\\|\/\/)/;
+var EXPRESSION_SYNTAX = /[=*?\[\]{}<>$()]/;
+var CLEAN_SEGMENT = /^[A-Za-z0-9._-]+$/;
+var FILE_EXTENSION = /(?:^|\/)[A-Za-z0-9_-][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,16}$/;
+function repositoryInventory(files) {
+  const directories = /* @__PURE__ */ new Set();
+  for (const file2 of files) {
+    const parts = file2.split("/");
+    for (let length = 1; length < parts.length; length++) {
+      directories.add(parts.slice(0, length).join("/"));
+    }
+  }
+  return { files, directories };
+}
+function hasLiveAncestor(target, inventory) {
+  let current = path3.posix.dirname(target);
+  while (current !== "." && current !== "") {
+    if (inventory.directories.has(current)) return true;
+    current = path3.posix.dirname(current);
+  }
+  return false;
+}
+function resolveDocumentPath(sourcePath, rawToken, line, inventory, explicitSyntax = false) {
+  const token = rawToken.trim();
+  if (token === "" || URI_SCHEME.test(token) || DRIVE_PATH.test(token) || UNC_PATH.test(token) || EXPRESSION_SYNTAX.test(token) || token.startsWith("@")) return null;
+  const forward = token.replace(/\\/g, "/");
+  const repositoryAnchored = forward.startsWith("/");
+  const explicitlyRelative = /^(?:\.\.?\/)/.test(forward);
+  const withoutAnchor = repositoryAnchored ? forward.slice(1) : forward;
+  const withoutTrailing = withoutAnchor.length > 1 ? withoutAnchor.replace(/\/+$/, "") : withoutAnchor;
+  const segments = withoutTrailing.split("/");
+  if (withoutTrailing === "" || segments.every((segment) => /^\d+$/.test(segment)) || segments.some((segment) => segment === "" || segment !== "." && segment !== ".." && !CLEAN_SEGMENT.test(segment))) return null;
+  const base = repositoryAnchored ? "" : path3.posix.dirname(sourcePath) === "." ? "" : path3.posix.dirname(sourcePath);
+  const resolvedTarget = path3.posix.normalize(path3.posix.join(base, withoutTrailing));
+  if (resolvedTarget === "." || resolvedTarget === "" || resolvedTarget === ".." || resolvedTarget.startsWith("../")) return null;
+  const rootAnchorCue = repositoryAnchored && (withoutTrailing.includes("/") || FILE_EXTENSION.test(withoutTrailing));
+  const hasCue = explicitSyntax || rootAnchorCue || explicitlyRelative || FILE_EXTENSION.test(withoutTrailing) || hasLiveAncestor(resolvedTarget, inventory);
+  if (!hasCue) return null;
+  return {
+    sourcePath,
+    line,
+    normalizedToken: withoutTrailing,
+    anchorMode: repositoryAnchored ? "repository" : "document",
+    resolvedTarget,
+    live: inventory.files.has(resolvedTarget) || inventory.directories.has(resolvedTarget)
+  };
+}
+
 // src/doc-graph.ts
 var NAV_FILE_NAMES = /* @__PURE__ */ new Set(["SUMMARY.md", "_sidebar.md", "_Sidebar.md"]);
 function basename(relPath) {
@@ -42062,45 +42114,48 @@ function isNavFile(relPath) {
   return NAV_FILE_NAMES.has(basename(relPath));
 }
 var EXTERNAL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]+:/;
-function resolveReference(fromPath, raw, kind, filePaths) {
+function resolveReference(fromPath, raw, kind, filePaths, line = 1) {
   const unresolved = () => ({
     from: fromPath,
     raw,
     kind,
+    line,
+    normalizedToken: null,
+    anchorMode: null,
     external: false,
     resolved: null,
     broken: false
   });
   const trimmed = raw.trim();
   if (trimmed === "" || EXTERNAL_SCHEME.test(trimmed)) {
-    return { from: fromPath, raw, kind, external: true, resolved: null, broken: false };
+    return { from: fromPath, raw, kind, line, normalizedToken: null, anchorMode: null, external: true, resolved: null, broken: false };
   }
   const hashIndex = trimmed.indexOf("#");
   const withoutAnchor = hashIndex === -1 ? trimmed : trimmed.slice(0, hashIndex);
   if (withoutAnchor === "") {
     return unresolved();
   }
-  const normalizedRaw = withoutAnchor.replace(/\\/g, "/");
-  if (normalizedRaw.endsWith("/")) {
-    return unresolved();
+  const sharedReference = resolveDocumentPath(
+    fromPath,
+    withoutAnchor,
+    line,
+    repositoryInventory(filePaths),
+    true
+  );
+  if (sharedReference !== null) {
+    return {
+      from: fromPath,
+      raw,
+      kind,
+      line,
+      normalizedToken: sharedReference.normalizedToken,
+      anchorMode: sharedReference.anchorMode,
+      external: false,
+      resolved: sharedReference.resolvedTarget,
+      broken: !sharedReference.live
+    };
   }
-  const fromDir = path3.posix.dirname(fromPath);
-  const joined = normalizedRaw.startsWith("/") ? normalizedRaw.slice(1) : path3.posix.join(fromDir === "." ? "" : fromDir, normalizedRaw);
-  const resolved = path3.posix.normalize(joined);
-  if (resolved === "." || resolved === "") {
-    return unresolved();
-  }
-  if (resolved === ".." || resolved.startsWith("../")) {
-    return unresolved();
-  }
-  return {
-    from: fromPath,
-    raw,
-    kind,
-    external: false,
-    resolved,
-    broken: !filePaths.has(resolved)
-  };
+  return unresolved();
 }
 function headingText(heading2) {
   const parts = [];
@@ -42130,23 +42185,23 @@ function extractReferences(fromPath, tree, filePaths) {
     definitions.set(node2.identifier, node2.url);
   });
   const refs = [];
-  const record2 = (rawUrl, kind) => {
+  const record2 = (rawUrl, kind, line) => {
     if (rawUrl === void 0) return;
-    refs.push(resolveReference(fromPath, rawUrl, kind, filePaths));
+    refs.push(resolveReference(fromPath, rawUrl, kind, filePaths, line));
   };
   visit(tree, (node2) => {
     switch (node2.type) {
       case "link":
-        record2(node2.url, "link");
+        record2(node2.url, "link", node2.position?.start.line ?? 1);
         break;
       case "image":
-        record2(node2.url, "image");
+        record2(node2.url, "image", node2.position?.start.line ?? 1);
         break;
       case "linkReference":
-        record2(definitions.get(node2.identifier), "link");
+        record2(definitions.get(node2.identifier), "link", node2.position?.start.line ?? 1);
         break;
       case "imageReference":
-        record2(definitions.get(node2.identifier), "image");
+        record2(definitions.get(node2.identifier), "image", node2.position?.start.line ?? 1);
         break;
       default:
         break;
@@ -42154,10 +42209,10 @@ function extractReferences(fromPath, tree, filePaths) {
   });
   return refs;
 }
-async function buildDocGraph(repoRoot, fileIndex) {
-  const filePaths = new Set(fileIndex.map((entry) => entry.path));
+async function buildDocGraph(repoRoot, fileIndex, inventoryPaths = new Set(fileIndex.map((entry) => entry.path))) {
+  const filePaths = inventoryPaths;
   const parsable = fileIndex.filter(
-    (entry) => (entry.kind === "doc" || entry.kind === "agent-context") && DOC_EXTENSIONS.has(path3.posix.extname(entry.path).toLowerCase())
+    (entry) => (entry.kind === "doc" || entry.kind === "agent-context") && DOC_EXTENSIONS.has(path4.posix.extname(entry.path).toLowerCase())
   );
   const references = [];
   const outbound = /* @__PURE__ */ new Map();
@@ -42346,7 +42401,7 @@ var contextBloatCheck = {
 };
 
 // src/package-graph.ts
-import path4 from "path";
+import path5 from "path";
 var PACKAGE_MANAGERS = ["npm", "pnpm", "yarn", "bun"];
 var LOCKFILE_MANAGERS = {
   "pnpm-lock.yaml": "pnpm",
@@ -42363,7 +42418,7 @@ function parseManagerName(field) {
 }
 async function buildPackageGraph(repoRoot, fileIndex) {
   const manifestEntries = fileIndex.filter(
-    (entry) => path4.posix.basename(entry.path) === "package.json"
+    (entry) => path5.posix.basename(entry.path) === "package.json"
   );
   const manifests = [];
   let packageManagerField = null;
@@ -42553,7 +42608,6 @@ var deadCommandCheck = {
 
 // src/checks/dead-paths.ts
 var import_ignore2 = __toESM(require_ignore(), 1);
-import path5 from "path";
 function hasGlobChars(token) {
   return /[*?[]/.test(token);
 }
@@ -42562,9 +42616,6 @@ function hasPlaceholderSyntax(token) {
 }
 function hasUrlScheme(token) {
   return EXTERNAL_SCHEME.test(token);
-}
-function isPathShaped(token) {
-  return token.includes("/");
 }
 var LEADING_PUNCTUATION = /^['",;:()]+/;
 var TRAILING_PUNCTUATION = /['",;:.()]+$/;
@@ -42597,27 +42648,6 @@ function extractPathMentions(content3) {
   });
   return mentions;
 }
-function normalizeToken(raw) {
-  const forward = raw.replace(/\\/g, "/");
-  const withoutDotSlash = forward.startsWith("./") ? forward.slice(2) : forward;
-  const withoutTrailingSlash = withoutDotSlash.length > 1 && withoutDotSlash.endsWith("/") ? withoutDotSlash.slice(0, -1) : withoutDotSlash;
-  return path5.posix.normalize(withoutTrailingSlash);
-}
-function ancestorsOf(filePath) {
-  const segments = filePath.split("/");
-  const dirs = [];
-  for (let i = 1; i < segments.length; i++) {
-    dirs.push(segments.slice(0, i).join("/"));
-  }
-  return dirs;
-}
-function deriveTrackedDirs(trackedFiles) {
-  const dirs = /* @__PURE__ */ new Set();
-  for (const file2 of trackedFiles) {
-    for (const dir of ancestorsOf(file2)) dirs.add(dir);
-  }
-  return dirs;
-}
 function brokenLinkTargetsOf(ctx, filePath) {
   return new Set(
     outboundReferencesOf(ctx.docGraph, filePath).filter((ref) => !ref.external && ref.resolved !== null && ref.broken).map((ref) => ref.resolved)
@@ -42628,17 +42658,16 @@ var deadPathCheck = {
   examine(ctx) {
     if (!ctx.config.radar.checks.deadPaths) return [];
     const trackedFiles = new Set(ctx.gitIndex.keys());
-    const trackedDirs = deriveTrackedDirs(trackedFiles);
+    const inventory = repositoryInventory(trackedFiles);
     const gitignoreMatcher = (0, import_ignore2.default)().add(ctx.rootGitignore);
     const findings = [];
     for (const file2 of ctx.surface) {
       const brokenLinkTargets = brokenLinkTargetsOf(ctx, file2.entry.path);
       for (const { token, line } of extractPathMentions(file2.content)) {
-        const candidate = token.replace(/^\/+/, "");
-        if (!isPathShaped(candidate)) continue;
         if (hasGlobChars(token) || hasPlaceholderSyntax(token) || hasUrlScheme(token)) continue;
-        const normalized = normalizeToken(candidate);
-        if (normalized === "" || normalized === "." || normalized.startsWith("..")) continue;
+        const reference = resolveDocumentPath(file2.entry.path, token, line, inventory);
+        if (reference === null) continue;
+        const normalized = reference.resolvedTarget;
         let ignoredByGitignore = false;
         try {
           ignoredByGitignore = gitignoreMatcher.ignores(normalized);
@@ -42646,7 +42675,7 @@ var deadPathCheck = {
           ignoredByGitignore = false;
         }
         if (ignoredByGitignore) continue;
-        if (trackedFiles.has(normalized) || trackedDirs.has(normalized)) continue;
+        if (reference.live) continue;
         if (brokenLinkTargets.has(normalized) || brokenLinkTargets.has(token)) continue;
         findings.push({
           type: "claim",
@@ -42732,6 +42761,13 @@ async function hasAnyCommit(repoRoot) {
   }
 }
 async function buildGitIndex(repoRoot) {
+  let inventoryOutput;
+  try {
+    inventoryOutput = await runGit(repoRoot, ["-c", "core.quotepath=off", "ls-files", "-z"]);
+  } catch (error51) {
+    throw new GunkError(`git ls-files failed in ${repoRoot}: ${String(error51)}`);
+  }
+  const currentInventory = inventoryOutput.split("\0").filter((file2) => file2 !== "");
   let stdout;
   try {
     stdout = await runGit(repoRoot, [
@@ -42743,7 +42779,7 @@ async function buildGitIndex(repoRoot) {
     ]);
   } catch (error51) {
     if (!await hasAnyCommit(repoRoot)) {
-      return /* @__PURE__ */ new Map();
+      return new Map(currentInventory.map((file2) => [file2, (/* @__PURE__ */ new Date()).toISOString()]));
     }
     throw new GunkError(`git log failed in ${repoRoot}: ${String(error51)}`);
   }
@@ -42758,7 +42794,8 @@ async function buildGitIndex(repoRoot) {
       lastTouched.set(file2, date5);
     }
   }
-  return lastTouched;
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  return new Map(currentInventory.map((file2) => [file2, lastTouched.get(file2) ?? now]));
 }
 
 // src/radar.ts
@@ -42800,7 +42837,7 @@ async function radar(repoRoot, config2) {
   const effectiveConfig = config2 ?? await loadConfig(root2);
   const fileIndex = await buildFileIndex(root2);
   const gitIndex = await buildGitIndex(root2);
-  const docGraph = await buildDocGraph(root2, fileIndex);
+  const docGraph = await buildDocGraph(root2, fileIndex, new Set(gitIndex.keys()));
   const packages = await buildPackageGraph(root2, fileIndex);
   const surface = await buildAuditSurface(root2, fileIndex, effectiveConfig.radar.exclude);
   const rootGitignore = await readRootGitignore(root2);
@@ -43282,7 +43319,7 @@ async function scan(repoRoot, config2) {
   const effectiveConfig = config2 ?? await loadConfig(root2);
   const fileIndex = await buildFileIndex(root2);
   const gitIndex = await buildGitIndex(root2);
-  const docGraph = await buildDocGraph(root2, fileIndex);
+  const docGraph = await buildDocGraph(root2, fileIndex, new Set(gitIndex.keys()));
   const references = await buildReferenceGraphs(root2, fileIndex, docGraph);
   const contents = await readDocContents(root2, fileIndex);
   const hashedFindings = await withContentHashes(
