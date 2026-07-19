@@ -178,6 +178,7 @@ describe("gunk except — content-pinned Radar claim exceptions (#53)", () => {
   });
 
   it("records a persisted claim with a reason, keeps it visible as EXCEPTED, and removes it from active work", async () => {
+    await writeFile(path.join(repo, ".gitignore"), await readFile(path.join(packageRoot, ".gitignore")));
     expect((await runGunk(repo, "scan")).exitCode).toBe(0);
     expect((await runGunk(repo, "radar")).exitCode).toBe(0);
 
@@ -206,6 +207,17 @@ describe("gunk except — content-pinned Radar claim exceptions (#53)", () => {
       token: "npm install",
       reason: "The example intentionally demonstrates the migration.",
     });
+    const ledgerIsIgnored = await execFileAsync(
+      "git",
+      ["check-ignore", "-q", ".gunk-buster/claim-exceptions.json"],
+      { cwd: repo },
+    )
+      .then(() => true)
+      .catch((error: { code?: number }) => {
+        if (error.code === 1) return false;
+        throw error;
+      });
+    expect(ledgerIsIgnored).toBe(false);
 
     const radarRun = await runGunk(repo, "radar", "--json");
     const radar = radarResultSchema.parse(JSON.parse(radarRun.stdout));

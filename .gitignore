@@ -1,6 +1,7 @@
 node_modules/
 /dist/*
 !/dist/mcp.js
-/.gunk-buster/
+/.gunk-buster/*
+!/.gunk-buster/claim-exceptions.json
 *.tsbuildinfo
 .claude/worktrees/
