@@ -78,6 +78,31 @@ describe("scan(repoRoot) — substantive ECHO detector (#55)", () => {
     expect(echoPaths).not.toContain("docs/code-case-change.md");
   });
 
+  it("does not aggregate short nested list items into substantive blocks", async () => {
+    const nestedLists = ["one", "two", "three"]
+      .map((group) => `- ${group}\n  - short item a\n  - short item b\n  - short item c`)
+      .join("\n");
+    const wrappedNestedLists = ["one", "two", "three"]
+      .map((group) => `- ${group}\n  > - short item a\n  > - short item b\n  > - short item c`)
+      .join("\n");
+    const root = await repo({
+      "README.md": "# root\n",
+      "docs/first.md": `# Shared\n\n${nestedLists}\n`,
+      "docs/second.md": `# Shared\n\n${nestedLists}\n`,
+      "docs/wrapped-first.md": `# Shared\n\n${wrappedNestedLists}\n`,
+      "docs/wrapped-second.md": `# Shared\n\n${wrappedNestedLists}\n`,
+    });
+
+    const echoPaths = (await scan(root)).findings
+      .filter((finding) => finding.type === "file" && finding.label === "ECHO")
+      .map((finding) => finding.path);
+
+    expect(echoPaths).not.toContain("docs/first.md");
+    expect(echoPaths).not.toContain("docs/second.md");
+    expect(echoPaths).not.toContain("docs/wrapped-first.md");
+    expect(echoPaths).not.toContain("docs/wrapped-second.md");
+  });
+
   it("makes only a valid declared derivative live and suppresses ECHO only for that pair", async () => {
     const shared = [block("one"), block("two"), block("three")].join("\n\n");
     const root = await repo({

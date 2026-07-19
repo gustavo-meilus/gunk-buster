@@ -1,8 +1,8 @@
 import path from "node:path";
-import type { Code, Definition, Heading, Image, ImageReference, InlineCode, Link, LinkReference, Root, TableCell } from "mdast";
+import type { Code, Definition, Heading, Image, ImageReference, InlineCode, Link, LinkReference, ListItem, Root, TableCell } from "mdast";
 import { remark } from "remark";
 import remarkGfm from "remark-gfm";
-import { visit } from "unist-util-visit";
+import { SKIP, visit } from "unist-util-visit";
 import { DOC_EXTENSIONS, readIndexedFile, type FileEntry } from "./file-index.js";
 import type { LinkFinding } from "./schema.js";
 import { repositoryInventory, resolveDocumentPath } from "./document-path.js";
@@ -242,6 +242,18 @@ function proseText(node: Root["children"][number]): string {
   return parts.join(" ");
 }
 
+/** Text owned by one list item, excluding nested list items. */
+function listItemText(item: ListItem): string {
+  const parts: string[] = [];
+  visit(item, (descendant) => {
+    if (descendant.type === "list") return SKIP;
+    if (descendant.type === "text" || descendant.type === "inlineCode") {
+      parts.push((descendant as { value: string }).value);
+    }
+  });
+  return parts.join(" ");
+}
+
 function normalizeProseBlock(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -259,7 +271,7 @@ function substantiveBlocks(tree: Root): string[] {
     if (node.type === "paragraph" && parent?.type !== "listItem") {
       record(normalizeProseBlock(proseText(node)));
     } else if (node.type === "listItem") {
-      record(normalizeProseBlock(proseText(node)));
+      record(normalizeProseBlock(listItemText(node as ListItem)));
     } else if (node.type === "tableRow") {
       record(normalizeProseBlock(proseText(node)));
     } else if (node.type === "code") {
