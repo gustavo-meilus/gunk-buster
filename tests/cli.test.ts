@@ -165,6 +165,102 @@ describe("gunk radar — CLI smoke test", () => {
   });
 });
 
+describe("gunk except — content-pinned Radar claim exceptions (#53)", () => {
+  let repo: string;
+
+  beforeAll(async () => {
+    execSync("pnpm build", { cwd: packageRoot, stdio: "pipe" });
+    repo = await createFixtureRepo("pm-drift-lockfile");
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  it("records a persisted claim with a reason, keeps it visible as EXCEPTED, and removes it from active work", async () => {
+    expect((await runGunk(repo, "scan")).exitCode).toBe(0);
+    expect((await runGunk(repo, "radar")).exitCode).toBe(0);
+
+    const except = await runGunk(
+      repo,
+      "except",
+      "README.md",
+      "package-manager-drift",
+      "npm install",
+      "--line",
+      "3",
+      "--reason",
+      "The example intentionally demonstrates the migration.",
+      "--json",
+    );
+    expect(except.exitCode).toBe(0);
+
+    const ledger = JSON.parse(
+      await readFile(path.join(repo, ".gunk-buster", "claim-exceptions.json"), "utf8"),
+    ) as { exceptions: Array<Record<string, string>> };
+    expect(ledger.exceptions).toHaveLength(1);
+    expect(ledger.exceptions[0]).toMatchObject({
+      path: "README.md",
+      line: 3,
+      check: "package-manager-drift",
+      token: "npm install",
+      reason: "The example intentionally demonstrates the migration.",
+    });
+
+    const radarRun = await runGunk(repo, "radar", "--json");
+    const radar = radarResultSchema.parse(JSON.parse(radarRun.stdout));
+    expect(radar.counts).toEqual({ byLabel: {}, byCheck: {} });
+    expect(radar.findings).toContainEqual(
+      expect.objectContaining({
+        disposition: "EXCEPTED",
+        exceptionReason: "The example intentionally demonstrates the migration.",
+      }),
+    );
+
+    const fixPlan = JSON.parse((await runGunk(repo, "radar", "--fix-plan", "--json")).stdout) as {
+      items: unknown[];
+    };
+    expect(fixPlan.items).toEqual([]);
+
+    const pile = JSON.parse((await runGunk(repo, "pile", "--json")).stdout) as {
+      groups: Array<{ label: string }>;
+      excepted: Array<{ disposition: string; exceptionReason: string }>;
+    };
+    expect(pile.groups.map((group) => group.label)).not.toContain("MOLD");
+    expect(pile.excepted).toEqual([
+      expect.objectContaining({ disposition: "EXCEPTED", exceptionReason: "The example intentionally demonstrates the migration." }),
+    ]);
+
+    const report = await runGunk(repo, "report");
+    expect(report.exitCode).toBe(0);
+    expect(await readFile(path.join(repo, ".gunk-buster", "reports", "report.md"), "utf8")).toContain("## EXCEPTED (1)");
+
+    await writeFile(path.join(repo, "README.md"), "# Changed example\n\n`npm install`\n");
+    const expired = radarResultSchema.parse(JSON.parse((await runGunk(repo, "radar", "--json")).stdout));
+    expect(expired.counts.byCheck["package-manager-drift"]).toBe(1);
+    expect(expired.findings[0]).toMatchObject({ disposition: "ACTIVE" });
+
+    await writeFile(path.join(repo, "README.md"), "# Changed again\n\n`npm install`\n");
+    const stale = await runGunk(
+      repo,
+      "except",
+      "README.md",
+      "package-manager-drift",
+      "npm install",
+      "--line",
+      "3",
+      "--reason",
+      "This request must not mask a changed document.",
+    );
+    expect(stale.exitCode).not.toBe(0);
+    expect(stale.stderr).toContain("run gunk radar again");
+    const unchangedLedger = JSON.parse(
+      await readFile(path.join(repo, ".gunk-buster", "claim-exceptions.json"), "utf8"),
+    ) as { exceptions: unknown[] };
+    expect(unchangedLedger.exceptions).toHaveLength(1);
+  });
+});
+
 describe("gunk radar --fix — CLI smoke test", () => {
   let repo: string;
 

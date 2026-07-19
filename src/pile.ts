@@ -101,6 +101,8 @@ export const pileResultSchema = z.object({
   radarScannedAt: radarResultSchema.shape.scannedAt.optional(),
   repoRoot: z.string(),
   groups: z.array(pileGroupSchema),
+  /** Visible audit rows that are intentionally excluded from active remediation groups. */
+  excepted: z.array(claimFindingSchema).optional(),
 });
 
 export type PileGroup = z.infer<typeof pileGroupSchema>;
@@ -169,7 +171,11 @@ export function mergeFindings(
     trappedAt: r.trappedAt,
     restoreCommand: r.restoreCommand,
   }));
-  return [...liveScanFindings, ...(radar?.findings ?? []), ...trappedRows];
+  return [
+    ...liveScanFindings,
+    ...(radar?.findings.filter((finding) => finding.disposition !== "EXCEPTED") ?? []),
+    ...trappedRows,
+  ];
 }
 
 /**
@@ -192,5 +198,8 @@ export function buildPileResult(
     ...(radar ? { radarScannedAt: radar.scannedAt } : {}),
     repoRoot: scan.repoRoot,
     groups: groupFindings(mergeFindings(scan, radar, receipts)),
+    ...(radar
+      ? { excepted: radar.findings.filter((finding) => finding.disposition === "EXCEPTED") }
+      : {}),
   });
 }

@@ -56,12 +56,15 @@ export function renderScanHuman(voice: Voice, result: ScanResult, scanPath: stri
 
 export function renderRadarHuman(voice: Voice, result: RadarResult, radarPath: string): string {
   const rel = toRepoRelative(result.repoRoot, radarPath);
-  const count = pluralFindings(result.findings.length);
+  const active = result.findings.filter((finding) => finding.disposition !== "EXCEPTED");
+  const excepted = result.findings.filter((finding) => finding.disposition === "EXCEPTED");
+  const count = pluralFindings(active.length);
 
   if (voice === "professional") {
     return [
       `Radar complete: ${result.repoRoot}`,
       `${count}.`,
+      ...(excepted.length > 0 ? [`${excepted.length} excepted claim${excepted.length === 1 ? "" : "s"}; not active remediation.`] : []),
       `Radar index written to ${rel}.`,
     ].join("\n");
   }
@@ -69,6 +72,7 @@ export function renderRadarHuman(voice: Voice, result: RadarResult, radarPath: s
   return [
     `Chief, radar's swept: ${result.repoRoot}`,
     `${count} caught on the sweep.`,
+    ...(excepted.length > 0 ? [`${excepted.length} excepted claim${excepted.length === 1 ? "" : "s"}; not active remediation.`] : []),
     `Index stashed at ${rel}.`,
   ].join("\n");
 }
@@ -103,7 +107,7 @@ function formatFinding(finding: PileFinding): string {
 }
 
 export function renderPileHuman(voice: Voice, pile: PileResult): string {
-  if (pile.groups.length === 0) {
+  if (pile.groups.length === 0 && (pile.excepted?.length ?? 0) === 0) {
     return voice === "professional"
       ? "No findings. Nothing to pile."
       : "Chief, the pile's empty — nothing but clean content out here.";
@@ -126,6 +130,12 @@ export function renderPileHuman(voice: Voice, pile: PileResult): string {
     lines.push(`${group.label} (${group.count}): ${formatVerdictCounts(group.verdictCounts)}`);
     for (const finding of group.findings) {
       lines.push(formatFinding(finding));
+    }
+  }
+  if ((pile.excepted?.length ?? 0) > 0) {
+    lines.push(`EXCEPTED (${pile.excepted?.length}): not active remediation.`);
+    for (const finding of pile.excepted ?? []) {
+      lines.push(`  ${finding.path}:${finding.line} — ${finding.exceptionReason}`);
     }
   }
   return lines.join("\n");

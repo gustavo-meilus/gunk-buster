@@ -14,6 +14,8 @@ import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
 import { GUNK_BUSTER_GITIGNORE } from "./gunk-buster-dir.js";
 import { buildPackageGraph } from "./package-graph.js";
+import { applyClaimExceptions, loadClaimExceptionLedger } from "./claim-exceptions.js";
+import { hashIndexedFile } from "./file-index.js";
 import type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
 import {
   CLAIM_LABELS,
@@ -84,6 +86,7 @@ export function summarizeRadarCounts(findings: readonly ClaimFinding[]): RadarRe
   const byCheck: Record<string, number> = {};
 
   for (const finding of findings) {
+    if (finding.disposition === "EXCEPTED") continue;
     byLabel[finding.label] = (byLabel[finding.label] ?? 0) + 1;
     byCheck[finding.check] = (byCheck[finding.check] ?? 0) + 1;
   }
@@ -126,7 +129,17 @@ export async function radar(repoRoot: string, config?: GunkConfig): Promise<Rada
     config: effectiveConfig,
     rootGitignore,
   };
-  const findings = CHECKS.flatMap((check) => check.examine(ctx));
+  const uncheckedFindings = CHECKS.flatMap((check) => check.examine(ctx));
+  const hashes = new Map<string, string>();
+  for (const finding of uncheckedFindings) {
+    if (!hashes.has(finding.path)) hashes.set(finding.path, await hashIndexedFile(root, finding.path));
+  }
+  const hashedFindings = uncheckedFindings.map((finding) => ({
+    ...finding,
+    contentHash: hashes.get(finding.path),
+  }));
+  const ledger = await loadClaimExceptionLedger(root);
+  const findings = applyClaimExceptions(hashedFindings, ledger.exceptions);
 
   return radarResultSchema.parse({
     schemaVersion: 1,
@@ -267,7 +280,7 @@ export type FixPlanResult = z.infer<typeof fixPlanResultSchema>;
 export function buildFixPlan(radar: RadarResult): FixPlanResult {
   const items = radar.findings
     .filter((finding): finding is ClaimFinding & { suggestion: NonNullable<ClaimFinding["suggestion"]> } =>
-      finding.suggestion !== undefined,
+      finding.disposition !== "EXCEPTED" && finding.suggestion !== undefined,
     )
     .map((finding) => ({
       path: finding.path,

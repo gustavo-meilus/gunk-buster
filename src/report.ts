@@ -32,6 +32,7 @@ export const reportResultSchema = z.object({
   repoRoot: z.string(),
   reportPath: z.string(),
   findingsCount: z.int().nonnegative(),
+  exceptedCount: z.int().nonnegative().optional(),
   counts: scanResultSchema.shape.counts,
 });
 
@@ -79,7 +80,8 @@ function renderReportBody(scan: ScanResult, radar: RadarResult | undefined, find
   ];
 
   const groups = groupFindings(findings);
-  if (groups.length === 0) {
+  const excepted = radar?.findings.filter((finding) => finding.disposition === "EXCEPTED") ?? [];
+  if (groups.length === 0 && excepted.length === 0) {
     lines.push("No findings.");
     return `${lines.join("\n")}\n`;
   }
@@ -88,6 +90,14 @@ function renderReportBody(scan: ScanResult, radar: RadarResult | undefined, find
     lines.push(`## ${group.label} (${group.count})`, "");
     for (const finding of group.findings) {
       lines.push(...findingLine(finding));
+    }
+    lines.push("");
+  }
+
+  if (excepted.length > 0) {
+    lines.push(`## EXCEPTED (${excepted.length})`, "");
+    for (const finding of excepted) {
+      lines.push(`- \`${finding.path}:${finding.line}\` — ${finding.exceptionReason}`);
     }
     lines.push("");
   }
@@ -137,6 +147,7 @@ export async function writeReport(
     repoRoot: scan.repoRoot,
     reportPath,
     findingsCount: findings.length,
+    ...(radar ? { exceptedCount: radar.findings.filter((finding) => finding.disposition === "EXCEPTED").length } : {}),
     counts: scan.counts,
   });
 }

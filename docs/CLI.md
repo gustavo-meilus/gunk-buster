@@ -96,6 +96,22 @@ gunk radar --fix
 gunk radar --fix --yes
 ```
 
+### `gunk except <path> <check> <token> --line <line> --reason <reason>`
+
+Records a Chief decision that one exact persisted Radar claim is legitimate.
+The command verifies that the persisted finding is still active and that its
+document has not changed, then writes a Git-tracked, content-pinned exception.
+The claim remains visible as `EXCEPTED`, with its reason, but leaves active
+counts and fix plans.
+
+```bash
+gunk except README.md package-manager-drift "npm install" --line 3 --reason "Intentional migration example"
+```
+
+Run `gunk radar` again after editing the document: the changed content expires
+the exception and restores the active claim. Exceptions cannot be created from
+inline comments, broad token allowlists, or whole-document exclusions.
+
 ### `gunk restore <reference>`
 
 Restores a trapped file byte-for-byte using its receipt. Use `gunk restore --help` for accepted path and receipt reference forms.
@@ -138,6 +154,7 @@ The repository's current [configuration](../gunk.config.json) is a useful exampl
 ├── radar.json      claim findings
 ├── reports/        rendered reports
 ├── keeps.json      content-pinned Chief decisions, when present
+├── claim-exceptions.json  content-pinned Radar claim decisions, when present
 └── receipts/       trap and restore audit records, when present
 ```
 

@@ -7,6 +7,7 @@ All notable changes to Gunk Buster are documented here.
 ### Changed
 
 - Document paths in nested Markdown now resolve from the containing document. Add a leading `/` to references intended to resolve from the repository root. Scan and Radar judge liveness from the current Git index, including indexed directories implied by tracked descendants.
+- Radar claim findings now carry `ACTIVE` or `EXCEPTED` disposition. Existing `radar.json` files without a disposition are read as active. Use `gunk except` to create a Git-tracked, content-pinned exception with a required reason; the exception expires automatically when its document changes.
 
 ## [0.5.0] - 2026-07-17
 

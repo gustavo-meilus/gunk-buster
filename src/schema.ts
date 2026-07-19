@@ -115,6 +115,28 @@ export const claimFindingSchema = z.object({
   expected: z.string(),
   actual: z.string(),
   suggestion: suggestionSchema.optional(),
+  /** SHA-256 of the source document's indexed bytes at Radar time. */
+  contentHash: z.string().regex(/^sha256:[0-9a-f]{64}$/).optional(),
+  /** ACTIVE findings need remediation; an EXCEPTED claim remains auditable only. */
+  disposition: z.enum(["ACTIVE", "EXCEPTED"]).optional(),
+  /** Required context for an EXCEPTED finding; absent for active findings. */
+  exceptionReason: z.string().min(1).optional(),
+});
+
+/** A single Chief-approved exception, scoped to one persisted Radar claim. */
+export const claimExceptionSchema = z.object({
+  path: z.string(),
+  line: z.int().positive(),
+  check: z.string(),
+  token: z.string().min(1),
+  contentHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  reason: z.string().min(1),
+  decidedAt: z.iso.datetime(),
+});
+
+export const claimExceptionLedgerSchema = z.object({
+  schemaVersion: z.literal(1),
+  exceptions: z.array(claimExceptionSchema),
 });
 
 /**
@@ -313,3 +335,5 @@ export type ScanResult = z.infer<typeof scanResultSchema>;
 export type Suggestion = z.infer<typeof suggestionSchema>;
 export type ClaimFinding = z.infer<typeof claimFindingSchema>;
 export type RadarResult = z.infer<typeof radarResultSchema>;
+export type ClaimException = z.infer<typeof claimExceptionSchema>;
+export type ClaimExceptionLedger = z.infer<typeof claimExceptionLedgerSchema>;
