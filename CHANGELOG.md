@@ -2,6 +2,12 @@
 
 All notable changes to Gunk Buster are documented here.
 
+## Unreleased
+
+### Changed
+
+- Document paths in nested Markdown now resolve from the containing document. Add a leading `/` to references intended to resolve from the repository root. Scan and Radar judge liveness from the current Git index, including indexed directories implied by tracked descendants.
+
 ## [0.5.0] - 2026-07-17
 
 Initial public release, implementing the five planned MVP stages: Scan, Radar, Trap, agent integrations, and the Codex distribution port.

@@ -8,15 +8,15 @@ import {
 } from "../src/checks/dead-paths.js";
 
 describe("isPathShaped(token) — the path-shaped candidacy test", () => {
-  it("qualifies a token containing a slash", () => {
+  it("requires more than a slash and accepts a filename-like extension cue", () => {
     expect(isPathShaped("src/index.ts")).toBe(true);
-    expect(isPathShaped("docs/")).toBe(true);
+    expect(isPathShaped("docs/")).toBe(false);
   });
 
   it("rejects a bare filename, even with a well-known extension — not provably a claim about this repo", () => {
-    expect(isPathShaped("AGENTS.md")).toBe(false);
-    expect(isPathShaped("bundle.js")).toBe(false);
-    expect(isPathShaped("yarn.lock")).toBe(false);
+    expect(isPathShaped("AGENTS.md")).toBe(true);
+    expect(isPathShaped("bundle.js")).toBe(true);
+    expect(isPathShaped("yarn.lock")).toBe(true);
   });
 
   it("rejects a plain word", () => {

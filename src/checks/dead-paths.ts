@@ -6,6 +6,7 @@ import { visit } from "unist-util-visit";
 import { EXTERNAL_SCHEME, outboundReferencesOf } from "../doc-graph.js";
 import { labelFor, type RadarCheck, type RadarContext } from "../radar-check.js";
 import type { ClaimFinding } from "../schema.js";
+import { repositoryInventory, resolveDocumentPath } from "../document-path.js";
 
 /**
  * Dead paths (#11, docs/specs/mvp-2-radar.md "3. Dead paths"): a path-shaped
@@ -58,7 +59,8 @@ export function hasUrlScheme(token: string): boolean {
  * `/` before testing, so a slash-command never qualifies either.
  */
 export function isPathShaped(token: string): boolean {
-  return token.includes("/");
+  const inventory = repositoryInventory(new Set());
+  return resolveDocumentPath("README.md", token, 1, inventory) !== null;
 }
 
 // Outer punctuation a token can pick up from surrounding prose-like
@@ -179,7 +181,7 @@ export const deadPathCheck: RadarCheck = {
     if (!ctx.config.radar.checks.deadPaths) return [];
 
     const trackedFiles = new Set(ctx.gitIndex.keys());
-    const trackedDirs = deriveTrackedDirs(trackedFiles);
+    const inventory = repositoryInventory(trackedFiles);
     const gitignoreMatcher = ignore().add(ctx.rootGitignore);
 
     const findings: ClaimFinding[] = [];
@@ -192,12 +194,10 @@ export const deadPathCheck: RadarCheck = {
         // the stripped form: a slash-command ("/deploy-now") or a lone "/"
         // stops qualifying, while a root-anchored path ("/src/index.ts")
         // still resolves against the git index like its relative twin.
-        const candidate = token.replace(/^\/+/, "");
-        if (!isPathShaped(candidate)) continue;
         if (hasGlobChars(token) || hasPlaceholderSyntax(token) || hasUrlScheme(token)) continue;
-
-        const normalized = normalizeToken(candidate);
-        if (normalized === "" || normalized === "." || normalized.startsWith("..")) continue;
+        const reference = resolveDocumentPath(file.entry.path, token, line, inventory);
+        if (reference === null) continue;
+        const normalized = reference.resolvedTarget;
 
         let ignoredByGitignore = false;
         try {
@@ -207,7 +207,7 @@ export const deadPathCheck: RadarCheck = {
         }
         if (ignoredByGitignore) continue;
 
-        if (trackedFiles.has(normalized) || trackedDirs.has(normalized)) continue;
+        if (reference.live) continue;
         if (brokenLinkTargets.has(normalized) || brokenLinkTargets.has(token)) continue;
 
         findings.push({

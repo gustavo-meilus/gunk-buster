@@ -4,6 +4,7 @@ import { remark } from "remark";
 import { visit } from "unist-util-visit";
 import { DOC_EXTENSIONS, readIndexedFile, type FileEntry } from "./file-index.js";
 import type { LinkFinding } from "./schema.js";
+import { repositoryInventory, resolveDocumentPath } from "./document-path.js";
 
 /**
  * The markdown/doc graph — the third scan graph (see docs/specs/mvp-1-scan.md):
@@ -28,6 +29,12 @@ export interface DocReference {
   raw: string;
   /** A markdown link (`[text](url)`) vs. an image (`![alt](url)`). */
   kind: DocRefKind;
+  /** 1-indexed source location of the Markdown reference. */
+  line: number;
+  /** Shared normalized document-path token, when this is an internal reference. */
+  normalizedToken: string | null;
+  /** Whether resolution starts at the containing document or repository root. */
+  anchorMode: "document" | "repository" | null;
   /**
    * An external URL (http/https/mailto/... — anything with a URI scheme).
    * Never resolved, never checked — no network calls, ever (product promise).
@@ -129,11 +136,15 @@ export function resolveReference(
   raw: string,
   kind: DocRefKind,
   filePaths: ReadonlySet<string>,
+  line = 1,
 ): DocReference {
   const unresolved = (): DocReference => ({
     from: fromPath,
     raw,
     kind,
+    line,
+    normalizedToken: null,
+    anchorMode: null,
     external: false,
     resolved: null,
     broken: false,
@@ -141,7 +152,7 @@ export function resolveReference(
 
   const trimmed = raw.trim();
   if (trimmed === "" || EXTERNAL_SCHEME.test(trimmed)) {
-    return { from: fromPath, raw, kind, external: true, resolved: null, broken: false };
+    return { from: fromPath, raw, kind, line, normalizedToken: null, anchorMode: null, external: true, resolved: null, broken: false };
   }
 
   const hashIndex = trimmed.indexOf("#");
@@ -150,6 +161,29 @@ export function resolveReference(
     return unresolved(); // pure same-document anchor, e.g. "#section"
   }
 
+  const sharedReference = resolveDocumentPath(
+    fromPath,
+    withoutAnchor,
+    1,
+    repositoryInventory(filePaths),
+    true,
+  );
+  if (sharedReference !== null) {
+    return {
+      from: fromPath,
+      raw,
+      kind,
+      line,
+      normalizedToken: sharedReference.normalizedToken,
+      anchorMode: sharedReference.anchorMode,
+      external: false,
+      resolved: sharedReference.resolvedTarget,
+      broken: !sharedReference.live,
+    };
+  }
+  return unresolved();
+
+  /* Legacy algorithm retained below temporarily for source compatibility. */
   const normalizedRaw = withoutAnchor.replace(/\\/g, "/");
   if (normalizedRaw.endsWith("/")) {
     return unresolved(); // directory reference, e.g. "docs/" — not a file target
@@ -172,6 +206,9 @@ export function resolveReference(
     from: fromPath,
     raw,
     kind,
+    line,
+    normalizedToken: normalizedRaw,
+    anchorMode: normalizedRaw.startsWith("/") ? "repository" : "document",
     external: false,
     resolved,
     broken: !filePaths.has(resolved),
@@ -233,24 +270,24 @@ function extractReferences(
   });
 
   const refs: DocReference[] = [];
-  const record = (rawUrl: string | undefined, kind: DocRefKind): void => {
+  const record = (rawUrl: string | undefined, kind: DocRefKind, line: number): void => {
     if (rawUrl === undefined) return; // dangling reference (no matching definition) — nothing to resolve
-    refs.push(resolveReference(fromPath, rawUrl, kind, filePaths));
+    refs.push(resolveReference(fromPath, rawUrl, kind, filePaths, line));
   };
 
   visit(tree, (node) => {
     switch (node.type) {
       case "link":
-        record((node as Link).url, "link");
+        record((node as Link).url, "link", node.position?.start.line ?? 1);
         break;
       case "image":
-        record((node as Image).url, "image");
+        record((node as Image).url, "image", node.position?.start.line ?? 1);
         break;
       case "linkReference":
-        record(definitions.get((node as LinkReference).identifier), "link");
+        record(definitions.get((node as LinkReference).identifier), "link", node.position?.start.line ?? 1);
         break;
       case "imageReference":
-        record(definitions.get((node as ImageReference).identifier), "image");
+        record(definitions.get((node as ImageReference).identifier), "image", node.position?.start.line ?? 1);
         break;
       default:
         break;
@@ -271,8 +308,9 @@ function extractReferences(
 export async function buildDocGraph(
   repoRoot: string,
   fileIndex: readonly FileEntry[],
+  inventoryPaths: ReadonlySet<string> = new Set(fileIndex.map((entry) => entry.path)),
 ): Promise<DocGraph> {
-  const filePaths = new Set(fileIndex.map((entry) => entry.path));
+  const filePaths = inventoryPaths;
   const parsable = fileIndex.filter(
     (entry) =>
       (entry.kind === "doc" || entry.kind === "agent-context") &&

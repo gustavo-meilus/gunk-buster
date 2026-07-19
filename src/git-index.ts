@@ -21,6 +21,14 @@ async function hasAnyCommit(repoRoot: string): Promise<boolean> {
  * yields an empty index — that is a successful scan, not a tool error.
  */
 export async function buildGitIndex(repoRoot: string): Promise<GitIndex> {
+  let inventoryOutput: string;
+  try {
+    inventoryOutput = await runGit(repoRoot, ["-c", "core.quotepath=off", "ls-files", "-z"]);
+  } catch (error) {
+    throw new GunkError(`git ls-files failed in ${repoRoot}: ${String(error)}`);
+  }
+  const currentInventory = inventoryOutput.split("\0").filter((file) => file !== "");
+
   let stdout: string;
   try {
     stdout = await runGit(repoRoot, [
@@ -32,7 +40,7 @@ export async function buildGitIndex(repoRoot: string): Promise<GitIndex> {
     ]);
   } catch (error) {
     if (!(await hasAnyCommit(repoRoot))) {
-      return new Map();
+      return new Map(currentInventory.map((file) => [file, new Date().toISOString()]));
     }
     throw new GunkError(`git log failed in ${repoRoot}: ${String(error)}`);
   }
@@ -48,5 +56,6 @@ export async function buildGitIndex(repoRoot: string): Promise<GitIndex> {
       lastTouched.set(file, date);
     }
   }
-  return lastTouched;
+  const now = new Date().toISOString();
+  return new Map(currentInventory.map((file) => [file, lastTouched.get(file) ?? now]));
 }

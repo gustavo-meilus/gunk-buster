@@ -109,7 +109,7 @@ export async function scan(
 
   const fileIndex = await buildFileIndex(root);
   const gitIndex = await buildGitIndex(root);
-  const docGraph = await buildDocGraph(root, fileIndex);
+  const docGraph = await buildDocGraph(root, fileIndex, new Set(gitIndex.keys()));
   const references = await buildReferenceGraphs(root, fileIndex, docGraph);
   const contents = await readDocContents(root, fileIndex);
 

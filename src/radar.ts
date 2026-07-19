@@ -112,7 +112,7 @@ export async function radar(repoRoot: string, config?: GunkConfig): Promise<Rada
 
   const fileIndex = await buildFileIndex(root);
   const gitIndex = await buildGitIndex(root);
-  const docGraph = await buildDocGraph(root, fileIndex);
+  const docGraph = await buildDocGraph(root, fileIndex, new Set(gitIndex.keys()));
   const packages = await buildPackageGraph(root, fileIndex);
   const surface = await buildAuditSurface(root, fileIndex, effectiveConfig.radar.exclude);
   const rootGitignore = await readRootGitignore(root);

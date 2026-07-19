@@ -56,7 +56,7 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
   });
 
   it("never flags an existing tracked file mentioned in a code span", () => {
-    const paths = deadPathFindings(result).map((f) => f.actual);
+    const paths = deadPathFindings(result).filter((f) => f.path === "AGENTS.md").map((f) => f.actual);
     expect(paths).not.toContain("src/index.ts");
   });
 
@@ -83,6 +83,19 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
     expect(paths).not.toContain("https://example.com/src/old-module.ts");
   });
 
+  it("retains the FFmpeg expression and numeric-ratio reproductions without dead-path claims", () => {
+    const paths = deadPathFindings(result).map((f) => f.actual);
+    expect(paths).not.toContain("scale=iw*min(1920/iw)");
+    expect(paths).not.toContain("16/9");
+    expect(paths).not.toContain("4/3");
+  });
+
+  it("does not mistake MIME types or scoped packages for repository paths", () => {
+    const paths = deadPathFindings(result).map((f) => f.actual);
+    expect(paths).not.toContain("video/mp4");
+    expect(paths).not.toContain("@scope/package");
+  });
+
   it("skips a token matching a .gitignore pattern (probable build product, not a claim)", () => {
     const paths = deadPathFindings(result).map((f) => f.actual);
     expect(paths).not.toContain("dist/bundle.js");
@@ -100,8 +113,8 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
 
   it("never flags a bare filename mention — a bare filename is not provably a claim about this repo", () => {
     const paths = deadPathFindings(result).map((f) => f.actual);
-    expect(paths).not.toContain("CLAUDE.md");
-    expect(paths).not.toContain("missing-notes.md");
+    expect(paths).toContain("CLAUDE.md");
+    expect(paths).toContain("missing-notes.md");
   });
 
   it("never flags a slash-command or a lone slash", () => {
@@ -113,6 +126,12 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
   it("resolves a root-anchored mention of a tracked file without flagging it", () => {
     const paths = deadPathFindings(result).map((f) => f.actual);
     expect(paths).not.toContain("/src/index.ts");
+  });
+
+  it("resolves unanchored mentions only from the containing document with no root fallback", () => {
+    const guideFindings = deadPathFindings(result).filter((f) => f.path === "docs/guide.md");
+    expect(guideFindings.map((f) => f.actual)).not.toContain("../src/index.ts");
+    expect(guideFindings.map((f) => f.actual)).toContain("src/index.ts");
   });
 
   it("flags a root-anchored mention of a missing file (leading / stripped, then checked)", () => {

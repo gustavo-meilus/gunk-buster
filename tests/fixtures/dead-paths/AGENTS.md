@@ -23,3 +23,9 @@ Bare filename mentions are not path claims: `CLAUDE.md` and `missing-notes.md`
 Slash commands are not paths: run `/deploy-now`, and `/` alone is syntax.
 
 Root-anchored paths are real claims: `/src/index.ts` exists, `/src/gone.ts` does not.
+
+FFmpeg expressions are not paths: `scale=iw*min(1920/iw)` and `scale=1920:-2`.
+
+Numeric ratios are not paths: `16/9` and `4/3`.
+
+Other slash syntax is not a repository claim: `video/mp4` and `@scope/package`.

@@ -66,9 +66,9 @@ describe("resolveReference(fromPath, raw, kind, filePaths) — link resolution e
     }
   });
 
-  it("treats a directory reference (trailing slash) as unresolved, not broken", () => {
+  it("resolves an indexed directory implied by an indexed descendant", () => {
     const ref = resolveReference("README.md", "docs/", "link", filePaths);
-    expect(ref.resolved).toBeNull();
+    expect(ref.resolved).toBe("docs");
     expect(ref.broken).toBe(false);
   });
 
