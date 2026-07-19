@@ -1,6 +1,10 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { buildDocGraph } from "../src/doc-graph.js";
+import { buildFileIndex } from "../src/file-index.js";
+import { buildGitIndex } from "../src/git-index.js";
+import { buildReferenceGraphs } from "../src/reference-graphs.js";
 import { scan } from "../src/scan.js";
 import { commitAll, createEmptyGitRepo, removeDir } from "./helpers/fixture.js";
 
@@ -19,6 +23,41 @@ describe("scan reference assertions (#54)", () => {
     commitAll(root, "fixture", "2025-01-01T00:00:00Z");
     return root;
   }
+
+  async function assertions(root: string) {
+    const fileIndex = await buildFileIndex(root);
+    const inventory = new Set((await buildGitIndex(root)).keys());
+    const docGraph = await buildDocGraph(root, fileIndex, inventory);
+    return (await buildReferenceGraphs(root, fileIndex, docGraph, inventory)).assertions;
+  }
+
+  it("keeps an indexed path in an inline command live with an explicit-path assertion", async () => {
+    const root = await repo({
+      "README.md": "Run `gunk scan docs/inline-command.md`.\n",
+      "docs/inline-command.md": "# inline command\n",
+    });
+
+    expect(await assertions(root)).toContainEqual(expect.objectContaining({
+      source: "document", sourcePath: "README.md", selector: "explicit-path", location: 1, target: "docs/inline-command.md",
+    }));
+    expect((await scan(root)).findings).not.toContainEqual(expect.objectContaining({
+      type: "file", path: "docs/inline-command.md", label: "GHOST",
+    }));
+  });
+
+  it("keeps an indexed path in a fenced command live with an explicit-path assertion", async () => {
+    const root = await repo({
+      "README.md": "```sh\ngunk scan docs/fenced-command.md\n```\n",
+      "docs/fenced-command.md": "# fenced command\n",
+    });
+
+    expect(await assertions(root)).toContainEqual(expect.objectContaining({
+      source: "document", sourcePath: "README.md", selector: "explicit-path", location: 2, target: "docs/fenced-command.md",
+    }));
+    expect((await scan(root)).findings).not.toContainEqual(expect.objectContaining({
+      type: "file", path: "docs/fenced-command.md", label: "GHOST",
+    }));
+  });
 
   it("only explicit document syntax proves a candidate live", async () => {
     const root = await repo({

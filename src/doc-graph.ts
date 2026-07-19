@@ -201,13 +201,16 @@ function extractExplicitMentions(fromPath: string, tree: Root, filePaths: Readon
     const reference = resolveDocumentPath(fromPath, token, line, inventory);
     if (reference !== null) mentions.push(reference);
   };
+  const recordCodeTokens = (value: string, line: number): void => {
+    for (const token of value.split(/\s+/)) record(token, line);
+  };
   visit(tree, (node) => {
     if (node.type === "inlineCode") {
       const inline = node as InlineCode;
-      record(inline.value, inline.position?.start.line ?? 1);
+      recordCodeTokens(inline.value, inline.position?.start.line ?? 1);
     } else if (node.type === "code") {
       const code = node as Code;
-      code.value.split(/\r?\n/).forEach((line, index) => record(line, (code.position?.start.line ?? 1) + index + 1));
+      code.value.split(/\r?\n/).forEach((line, index) => recordCodeTokens(line, (code.position?.start.line ?? 1) + index + 1));
     } else if (node.type === "tableCell") {
       const cell = node as TableCell;
       const values: string[] = [];
