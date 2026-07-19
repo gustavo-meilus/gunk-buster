@@ -76,4 +76,3 @@ describe("hasUrlScheme(token) — guard 3", () => {
     expect(hasUrlScheme("src/index.ts")).toBe(false);
   });
 });
-

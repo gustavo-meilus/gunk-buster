@@ -112,6 +112,7 @@ export const echoDetector: Detector = {
       if (counterpartPath === entry.path) continue;
 
       if (isDeclaredCopyPair(entry.path, counterpartPath, ctx)) continue;
+      if (compareDocStructures(own, other) === null) continue;
       const match = compareDocContent(own, other);
       if (match !== null) evidence.push({
         rule: "substantive-content-overlap",

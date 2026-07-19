@@ -54159,6 +54159,7 @@ var echoDetector = {
     for (const [counterpartPath, other] of allDocStructures(ctx.docGraph)) {
       if (counterpartPath === entry.path) continue;
       if (isDeclaredCopyPair(entry.path, counterpartPath, ctx)) continue;
+      if (compareDocStructures(own6, other) === null) continue;
       const match = compareDocContent(own6, other);
       if (match !== null) evidence.push({
         rule: "substantive-content-overlap",
@@ -54528,7 +54529,7 @@ var deadPathCheck = {
             }
           ],
           expected: "a git-tracked file or directory",
-          actual: token
+          actual: reference.normalizedToken
         });
       }
     }
@@ -55925,9 +55926,8 @@ function targetPath(sourcePath, target, resolveFrom) {
   const resolved = path13.posix.normalize(path13.posix.join(base === "." ? "" : base, normalized.replace(/^\//, "")));
   return resolved === ".." || resolved.startsWith("../") ? null : resolved;
 }
-async function buildConfiguredAssertions(repoRoot, entries, config2) {
-  const inventory = new Set(entries.map((entry) => entry.path));
-  const entryByPath = new Map(entries.map((entry) => [entry.path, entry]));
+async function buildConfiguredAssertions(repoRoot, entries, inventory, config2) {
+  const entryByPath = new Map(entries.filter((entry) => inventory.has(entry.path)).map((entry) => [entry.path, entry]));
   const assertions = [];
   const broken = [];
   const diagnostics = [];
@@ -56060,13 +56060,14 @@ async function packageScriptMentions(repoRoot, packageJsonPath, candidatePaths, 
     retainMentionAssertions(assertionsFromMentions("package-script", packageJsonPath, `scripts.${name}`, value, candidatePaths, (pointers[pointer]?.value.line ?? 0) + 1, true), assertions, into);
   }
 }
-async function buildReferenceGraphs(repoRoot, fileIndex, docGraph) {
-  const candidatePaths = fileIndex.map((entry) => entry.path);
+async function buildReferenceGraphs(repoRoot, fileIndex, docGraph, inventory) {
+  const candidatePaths = [...inventory];
   const agentContextReferenced = /* @__PURE__ */ new Set();
   const packageScriptReferenced = /* @__PURE__ */ new Set();
   const ciReferenced = /* @__PURE__ */ new Set();
   const assertions = [];
   for (const entry of fileIndex) {
+    if (!inventory.has(entry.path)) continue;
     if (entry.kind === "agent-context") {
       if (!DOC_EXTENSIONS.has(path14.posix.extname(entry.path).toLowerCase())) {
         const text5 = await readIndexedFile(repoRoot, entry.path);
@@ -56085,10 +56086,10 @@ async function buildReferenceGraphs(repoRoot, fileIndex, docGraph) {
     }
   }
   for (const ref of docGraph.references) {
-    if (!ref.external && ref.resolved !== null && !ref.broken) assertions.push({ source: "document", sourcePath: ref.from, selector: ref.kind, location: ref.line, target: ref.resolved });
+    if (inventory.has(ref.from) && !ref.external && ref.resolved !== null && !ref.broken) assertions.push({ source: "document", sourcePath: ref.from, selector: ref.kind, location: ref.line, target: ref.resolved });
   }
   for (const mention of docGraph.explicitMentions) {
-    if (mention.live) {
+    if (inventory.has(mention.sourcePath) && mention.live) {
       assertions.push({ source: "document", sourcePath: mention.sourcePath, selector: "explicit-path", location: mention.line, target: mention.resolvedTarget });
       if (fileIndex.find((entry) => entry.path === mention.sourcePath)?.kind === "agent-context") agentContextReferenced.add(mention.resolvedTarget);
     }
@@ -56153,9 +56154,10 @@ async function scan(repoRoot, config2) {
   const effectiveConfig = config2 ?? await loadConfig(root2);
   const fileIndex = await buildFileIndex(root2);
   const gitIndex = await buildGitIndex(root2);
-  const docGraph = await buildDocGraph(root2, fileIndex, new Set(gitIndex.keys()));
-  const builtInReferences = await buildReferenceGraphs(root2, fileIndex, docGraph);
-  const configuredReferences = await buildConfiguredAssertions(root2, fileIndex, effectiveConfig);
+  const inventory = new Set(gitIndex.keys());
+  const docGraph = await buildDocGraph(root2, fileIndex, inventory);
+  const builtInReferences = await buildReferenceGraphs(root2, fileIndex, docGraph, inventory);
+  const configuredReferences = await buildConfiguredAssertions(root2, fileIndex, inventory, effectiveConfig);
   const allAssertions = [...builtInReferences.assertions, ...configuredReferences.assertions];
   const assertions = deduplicateAssertions(allAssertions);
   const references = {

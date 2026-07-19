@@ -143,7 +143,7 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
 
   it("flags a root-anchored mention of a missing file (leading / stripped, then checked)", () => {
     const finding = deadPathFindings(result).find(
-      (f) => f.path === "AGENTS.md" && f.actual === "/src/gone.ts",
+      (f) => f.path === "AGENTS.md" && f.actual === "src/gone.ts",
     );
     expect(finding).toBeDefined();
     expect(finding?.line).toBe(25);

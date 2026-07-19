@@ -144,6 +144,30 @@ proves only the derivative live and suppresses ECHO only for that declared
 pair. A missing endpoint is reported as a broken reference; it grants neither
 liveness nor suppression.
 
+`references.sources` declares trusted, non-executable manifest sources. Every
+source has a stable `name`, one or more `files` globs, and `resolveFrom` set to
+`source-directory` or `repository-root`. JSON and YAML sources provide one or
+more dot-separated `selectors` using named properties, numeric indices, and
+`*`; text sources provide a `regex` with a named `target` capture. For example:
+
+```json
+{
+  "references": {
+    "sources": [{
+      "name": "agent-registry",
+      "files": [".agents/registry.json"],
+      "format": "json",
+      "selectors": ["agents.*.path"],
+      "resolveFrom": "repository-root"
+    }]
+  }
+}
+```
+
+Live extracted targets prove liveness; missing targets become broken-reference
+findings. Empty globs, malformed inputs, invalid selectors, and non-string
+matches are reported as scan diagnostics, while valid sibling sources continue.
+
 The repository's current [configuration](../gunk.config.json) is a useful example of excluding fixtures, raw reference material, specs, and agent-process docs from Radar while preserving them in Git.
 
 ## Persistent files

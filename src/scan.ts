@@ -110,9 +110,10 @@ export async function scan(
 
   const fileIndex = await buildFileIndex(root);
   const gitIndex = await buildGitIndex(root);
-  const docGraph = await buildDocGraph(root, fileIndex, new Set(gitIndex.keys()));
-  const builtInReferences = await buildReferenceGraphs(root, fileIndex, docGraph);
-  const configuredReferences = await buildConfiguredAssertions(root, fileIndex, effectiveConfig);
+  const inventory = new Set(gitIndex.keys());
+  const docGraph = await buildDocGraph(root, fileIndex, inventory);
+  const builtInReferences = await buildReferenceGraphs(root, fileIndex, docGraph, inventory);
+  const configuredReferences = await buildConfiguredAssertions(root, fileIndex, inventory, effectiveConfig);
   const allAssertions = [...builtInReferences.assertions, ...configuredReferences.assertions];
   const assertions = deduplicateAssertions(allAssertions);
   const references = {

@@ -25,27 +25,27 @@ describe("radar(repoRoot, config) - current Git index inventory (#52)", () => {
       git(repo, "add", "-A");
       git(repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "initial");
 
-      expect(await deadPaths(repo)).toContain("/src/new.ts");
-      expect(await deadPaths(repo)).not.toContain("/src/old.ts");
+      expect(await deadPaths(repo)).toContain("src/new.ts");
+      expect(await deadPaths(repo)).not.toContain("src/old.ts");
 
       await rm(path.join(repo, "src", "old.ts"));
-      expect(await deadPaths(repo)).not.toContain("/src/old.ts");
+      expect(await deadPaths(repo)).not.toContain("src/old.ts");
 
       git(repo, "add", "-u");
-      expect(await deadPaths(repo)).toContain("/src/old.ts");
+      expect(await deadPaths(repo)).toContain("src/old.ts");
 
       git(repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "delete old path");
-      expect(await deadPaths(repo)).toContain("/src/old.ts"); // historical-only is still dead
+      expect(await deadPaths(repo)).toContain("src/old.ts"); // historical-only is still dead
 
       await writeFile(path.join(repo, "src", "old.ts"), "untracked replacement\n");
-      expect(await deadPaths(repo)).toContain("/src/old.ts");
+      expect(await deadPaths(repo)).toContain("src/old.ts");
 
       git(repo, "add", "src/old.ts");
       await rename(path.join(repo, "src", "old.ts"), path.join(repo, "src", "new.ts"));
       git(repo, "add", "-A");
       const afterRename = await deadPaths(repo);
-      expect(afterRename).toContain("/src/old.ts");
-      expect(afterRename).not.toContain("/src/new.ts");
+      expect(afterRename).toContain("src/old.ts");
+      expect(afterRename).not.toContain("src/new.ts");
     } finally {
       await removeDir(repo);
     }

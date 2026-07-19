@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { buildDocGraph } from "../src/doc-graph.js";
 import { buildFileIndex } from "../src/file-index.js";
+import { buildGitIndex } from "../src/git-index.js";
 import { buildReferenceGraphs, mentionsPath, type ReferenceGraphs } from "../src/reference-graphs.js";
 import { scan } from "../src/scan.js";
 import { pathsWithLabel } from "./helpers/findings.js";
@@ -37,7 +38,7 @@ describe("built-in assertion provenance (#54)", () => {
     const repo = await createFixtureRepo("reference-surface", { commitDate: NINETY_DAYS_AGO });
     try {
       const fileIndex = await buildFileIndex(repo);
-      const graph = await buildReferenceGraphs(repo, fileIndex, await buildDocGraph(repo, fileIndex));
+      const graph = await buildReferenceGraphs(repo, fileIndex, await buildDocGraph(repo, fileIndex), new Set((await buildGitIndex(repo)).keys()));
       expect(graph.assertions).toContainEqual(expect.objectContaining({
         source: "package-script", sourcePath: "package.json", selector: "scripts.docs:check",
         location: 5, target: "docs/script-only.md",
@@ -56,7 +57,7 @@ describe("buildReferenceGraphs(repoRoot, fileIndex, docGraph) — full agent-con
     repo = await createFixtureRepo("agent-context-surface", { commitDate: NINETY_DAYS_AGO });
     const fileIndex = await buildFileIndex(repo);
     const docGraph = await buildDocGraph(repo, fileIndex);
-    graphs = await buildReferenceGraphs(repo, fileIndex, docGraph);
+    graphs = await buildReferenceGraphs(repo, fileIndex, docGraph, new Set((await buildGitIndex(repo)).keys()));
   });
 
   afterAll(async () => {

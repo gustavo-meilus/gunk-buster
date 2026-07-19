@@ -84,4 +84,20 @@ describe("scan reference assertions (#54)", () => {
     const result = await scan(root);
     expect((result.diagnostics ?? []).map((d) => d.code)).toEqual(["source-glob-empty", "malformed-source"]);
   });
+
+  it("does not let untracked sources or targets prove liveness", async () => {
+    const root = await repo({
+      "README.md": "# root\n\n`docs/untracked.md`\n",
+      "docs/tracked-agent.md": "# agent\n",
+      "gunk.config.json": JSON.stringify({ references: { sources: [{ name: "registry", files: ["registry.json"], format: "json", selectors: ["agent"], resolveFrom: "repository-root" }] } }),
+    });
+    await writeFile(path.join(root, "registry.json"), JSON.stringify({ agent: "docs/tracked-agent.md" }));
+    await mkdir(path.join(root, "docs"), { recursive: true });
+    await writeFile(path.join(root, "docs", "untracked.md"), "# untracked\n");
+
+    const result = await scan(root);
+    expect(result.findings).toContainEqual(expect.objectContaining({ type: "file", path: "docs/tracked-agent.md", label: "GHOST" }));
+    expect(result.findings).toContainEqual(expect.objectContaining({ type: "file", path: "docs/untracked.md", label: "GHOST" }));
+    expect((result.diagnostics ?? []).map((diagnostic) => diagnostic.code)).toContain("source-glob-empty");
+  });
 });

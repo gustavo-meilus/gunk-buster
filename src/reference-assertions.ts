@@ -71,9 +71,8 @@ function targetPath(sourcePath: string, target: string, resolveFrom: "source-dir
   return resolved === ".." || resolved.startsWith("../") ? null : resolved;
 }
 
-export async function buildConfiguredAssertions(repoRoot: string, entries: readonly FileEntry[], config: GunkConfig): Promise<ReferenceAssertionGraph> {
-  const inventory = new Set(entries.map((entry) => entry.path));
-  const entryByPath = new Map(entries.map((entry) => [entry.path, entry]));
+export async function buildConfiguredAssertions(repoRoot: string, entries: readonly FileEntry[], inventory: ReadonlySet<string>, config: GunkConfig): Promise<ReferenceAssertionGraph> {
+  const entryByPath = new Map(entries.filter((entry) => inventory.has(entry.path)).map((entry) => [entry.path, entry]));
   const assertions: ReferenceAssertion[] = [];
   const broken: BrokenReferenceFinding[] = [];
   const diagnostics: ReferenceDiagnostic[] = [];

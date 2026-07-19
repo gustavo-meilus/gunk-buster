@@ -189,7 +189,7 @@ export const deadPathCheck: RadarCheck = {
             },
           ],
           expected: "a git-tracked file or directory",
-          actual: token,
+          actual: reference.normalizedToken,
         });
       }
     }

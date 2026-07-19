@@ -29,12 +29,12 @@ describe("scan(repoRoot) — substantive ECHO detector (#55)", () => {
       "docs/title-only-copy.md": "# Shared title\n## Same heading\n" + [block("title-one"), block("title-two"), block("title-different")].join("\n\n"),
       "docs/below-containment.md": "# Different title\n" + [block("below-one"), block("below-two"), block("below-three"), block("below-four"), block("below-five")].join("\n\n"),
       "docs/below-containment-copy.md": "# Another title\n" + [block("below-one"), block("below-two"), block("below-three"), block("below-different"), block("below-other")].join("\n\n"),
-      "docs/at-threshold.md": "# Original\n" + [block("threshold-one"), block("threshold-two"), block("threshold-three"), block("threshold-four"), block("threshold-five")].join("\n\n"),
-      "docs/at-threshold-copy.md": "# Derivative\n" + [block("threshold-one"), block("threshold-two"), block("threshold-three"), block("threshold-four"), block("threshold-extra")].join("\n\n"),
+      "docs/at-threshold.md": "# Threshold\n## Shared\n" + [block("threshold-one"), block("threshold-two"), block("threshold-three"), block("threshold-four"), block("threshold-five")].join("\n\n"),
+      "docs/at-threshold-copy.md": "# Threshold\n## Shared\n" + [block("threshold-one"), block("threshold-two"), block("threshold-three"), block("threshold-four"), block("threshold-extra")].join("\n\n"),
       "docs/two-blocks.md": "# Two blocks\n" + [block("two-one"), block("two-two")].join("\n\n"),
       "docs/two-blocks-copy.md": "# Two blocks copy\n" + [block("two-one"), block("two-two")].join("\n\n"),
-      "docs/three-blocks.md": "# Three blocks\n" + [block("three-one"), block("three-two"), block("three-three")].join("\n\n"),
-      "docs/three-blocks-copy.md": "# Three blocks copy\n" + [block("three-one"), block("three-two"), block("three-three")].join("\n\n"),
+      "docs/three-blocks.md": "# Three blocks\n## Shared\n" + [block("three-one"), block("three-two"), block("three-three")].join("\n\n"),
+      "docs/three-blocks-copy.md": "# Three blocks\n## Shared\n" + [block("three-one"), block("three-two"), block("three-three")].join("\n\n"),
     });
 
     const echoPaths = (await scan(root)).findings
@@ -48,7 +48,21 @@ describe("scan(repoRoot) — substantive ECHO detector (#55)", () => {
     expect(echoPaths).toEqual(expect.arrayContaining(["docs/three-blocks.md", "docs/three-blocks-copy.md"]));
   });
 
-  it("normalizes prose presentation while keeping code exact, and compares lists, table rows, and fenced blocks", async () => {
+  it("uses heading similarity only to nominate substantive comparisons", async () => {
+    const shared = [block("one"), block("two"), block("three")].join("\n\n");
+    const root = await repo({
+      "README.md": "# root\n",
+      "docs/first.md": `# First\n\n${shared}`,
+      "docs/second.md": `# Second\n\n${shared}`,
+    });
+
+    const echoPaths = (await scan(root)).findings
+      .filter((finding) => finding.type === "file" && finding.label === "ECHO")
+      .map((finding) => finding.path);
+    expect(echoPaths).not.toEqual(expect.arrayContaining(["docs/first.md", "docs/second.md"]));
+  });
+
+  it("does not compare otherwise matching blocks without a heading nomination", async () => {
     const prose = "This **important** guidance has MIXED case and more than forty meaningful characters.";
     const root = await repo({
       "README.md": "# root\n",
@@ -60,7 +74,7 @@ describe("scan(repoRoot) — substantive ECHO detector (#55)", () => {
     const echoPaths = (await scan(root)).findings
       .filter((finding) => finding.type === "file" && finding.label === "ECHO")
       .map((finding) => finding.path);
-    expect(echoPaths).toEqual(expect.arrayContaining(["docs/original.md", "docs/copy.md"]));
+    expect(echoPaths).not.toEqual(expect.arrayContaining(["docs/original.md", "docs/copy.md"]));
     expect(echoPaths).not.toContain("docs/code-case-change.md");
   });
 
@@ -68,9 +82,9 @@ describe("scan(repoRoot) — substantive ECHO detector (#55)", () => {
     const shared = [block("one"), block("two"), block("three")].join("\n\n");
     const root = await repo({
       "README.md": "# root\n",
-      "docs/canonical.md": `# Canonical\n\n${shared}`,
-      "docs/derivative.md": `# Derivative\n\n${shared}`,
-      "docs/unrelated-copy.md": `# Unrelated\n\n${shared}`,
+      "docs/canonical.md": `# Shared guide\n\n${shared}`,
+      "docs/derivative.md": `# Shared guide\n\n${shared}`,
+      "docs/unrelated-copy.md": `# Shared guide\n\n${shared}`,
       "gunk.config.json": JSON.stringify({ references: { copies: [{ canonical: "docs/canonical.md", derivative: "docs/derivative.md", reason: "release snapshot" }] } }),
     });
 
@@ -87,8 +101,8 @@ describe("scan(repoRoot) — substantive ECHO detector (#55)", () => {
     const shared = [block("one"), block("two"), block("three")].join("\n\n");
     const root = await repo({
       "README.md": "# root\n",
-      "docs/derivative.md": `# Derivative\n\n${shared}`,
-      "docs/unrelated-copy.md": `# Unrelated\n\n${shared}`,
+      "docs/derivative.md": `# Shared guide\n\n${shared}`,
+      "docs/unrelated-copy.md": `# Shared guide\n\n${shared}`,
       "gunk.config.json": JSON.stringify({ references: { copies: [{ canonical: "docs/missing.md", derivative: "docs/derivative.md", reason: "release snapshot" }] } }),
     });
 

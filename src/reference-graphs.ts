@@ -122,8 +122,9 @@ export async function buildReferenceGraphs(
   repoRoot: string,
   fileIndex: readonly FileEntry[],
   docGraph: DocGraph,
+  inventory: ReadonlySet<string>,
 ): Promise<ReferenceGraphs> {
-  const candidatePaths = fileIndex.map((entry) => entry.path);
+  const candidatePaths = [...inventory];
 
   const agentContextReferenced = new Set<string>();
   const packageScriptReferenced = new Set<string>();
@@ -131,6 +132,7 @@ export async function buildReferenceGraphs(
   const assertions: ReferenceAssertion[] = [];
 
   for (const entry of fileIndex) {
+    if (!inventory.has(entry.path)) continue;
     if (entry.kind === "agent-context") {
       if (!DOC_EXTENSIONS.has(path.posix.extname(entry.path).toLowerCase())) {
         const text = await readIndexedFile(repoRoot, entry.path);
@@ -150,10 +152,10 @@ export async function buildReferenceGraphs(
   }
 
   for (const ref of docGraph.references) {
-    if (!ref.external && ref.resolved !== null && !ref.broken) assertions.push({ source: "document", sourcePath: ref.from, selector: ref.kind, location: ref.line, target: ref.resolved });
+    if (inventory.has(ref.from) && !ref.external && ref.resolved !== null && !ref.broken) assertions.push({ source: "document", sourcePath: ref.from, selector: ref.kind, location: ref.line, target: ref.resolved });
   }
   for (const mention of docGraph.explicitMentions) {
-    if (mention.live) {
+    if (inventory.has(mention.sourcePath) && mention.live) {
       assertions.push({ source: "document", sourcePath: mention.sourcePath, selector: "explicit-path", location: mention.line, target: mention.resolvedTarget });
       if (fileIndex.find((entry) => entry.path === mention.sourcePath)?.kind === "agent-context") agentContextReferenced.add(mention.resolvedTarget);
     }
