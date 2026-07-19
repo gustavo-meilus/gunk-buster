@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultConfig } from "../src/config.js";
 import { scan } from "../src/scan.js";
@@ -97,6 +99,47 @@ describe("scan(repoRoot, config) — a single reference from any surface defeats
 
   it("the control doc referenced by nothing is the only GHOST", () => {
     expect(ghostPaths()).toEqual(["docs/truly-orphan.md"]);
+  });
+});
+
+/**
+ * Regression companion to radar-untracked-source.test.ts: that test proves an
+ * untracked source IS parsed (so its own claims are audited); this one proves
+ * the other half of commit a3e0530 — an untracked source must NOT rescue an
+ * indexed candidate from GHOST. `docs/old-plan.md` is a tracked orphan; adding
+ * a never-committed agent-context file that links to it must leave it GHOST,
+ * because untracked worktree content is not declared repository state and so
+ * its inbound link is gated out of the rescue maps (ADR-0013).
+ */
+describe("scan(repoRoot, config) — an untracked source does not rescue an indexed GHOST (#5)", () => {
+  let repo: string;
+  let result: ScanResult;
+
+  beforeAll(async () => {
+    repo = await createFixtureRepo("orphan-docs", { commitDate: NINETY_DAYS_AGO });
+
+    // Never added to the index. Its markdown link resolves to the tracked
+    // orphan, so pre-fix it would have populated inboundLinks and defeated
+    // GHOST; post-fix the untracked `from` is gated out of every rescue map.
+    await mkdir(path.join(repo, ".claude"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".claude", "notes.md"),
+      "# Notes\n\nSee [the old plan](../docs/old-plan.md).\n",
+    );
+
+    result = await scan(repo, defaultConfig());
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  it("keeps the indexed orphan GHOST even though an untracked file links to it", () => {
+    const finding = fileFindings(result).find((f) => f.path === "docs/old-plan.md");
+
+    expect(finding).toBeDefined();
+    expect(finding?.label).toBe("GHOST");
+    expect(finding?.evidence[0]?.rule).toBe("unreferenced");
   });
 });
 
