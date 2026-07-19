@@ -370,9 +370,14 @@ export async function buildDocGraph(
   inventoryPaths: ReadonlySet<string> = new Set(fileIndex.map((entry) => entry.path)),
 ): Promise<DocGraph> {
   const filePaths = inventoryPaths;
+  // Parse every working-tree doc/agent-context markdown file, not only the
+  // indexed ones: an untracked source document still makes claims Radar must
+  // audit (dead paths, README duplication, …). `inventoryPaths` governs what a
+  // reference can *resolve* to (target liveness), not whether a source is read
+  // at all; gating this filter on it silently dropped every untracked source
+  // from the graph the checks read.
   const parsable = fileIndex.filter(
     (entry) =>
-      inventoryPaths.has(entry.path) &&
       (entry.kind === "doc" || entry.kind === "agent-context") &&
       DOC_EXTENSIONS.has(path.posix.extname(entry.path).toLowerCase()),
   );
@@ -399,6 +404,12 @@ export async function buildDocGraph(
 
   for (const ref of references) {
     if (ref.external || ref.resolved === null || ref.broken) continue;
+    // A reference proves its target live only when the source itself is part
+    // of the current inventory. An untracked source is parsed (so its own
+    // claims are audited) but its links must not rescue an indexed candidate
+    // from GHOST — untracked worktree content is not declared repository state
+    // (ADR-0013).
+    if (!inventoryPaths.has(ref.from)) continue;
 
     const bucket = ref.kind === "image" ? inboundImages : inboundLinks;
     const set = bucket.get(ref.resolved) ?? new Set<string>();

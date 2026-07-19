@@ -53939,13 +53939,16 @@ function extractExplicitMentions(fromPath, tree, filePaths) {
     const reference = resolveDocumentPath(fromPath, token, line, inventory);
     if (reference !== null) mentions.push(reference);
   };
+  const recordCommandTokens = (value, line) => {
+    for (const token of value.split(/\s+/)) record2(token, line);
+  };
   visit(tree, (node2) => {
     if (node2.type === "inlineCode") {
       const inline = node2;
-      record2(inline.value, inline.position?.start.line ?? 1);
+      recordCommandTokens(inline.value, inline.position?.start.line ?? 1);
     } else if (node2.type === "code") {
       const code3 = node2;
-      code3.value.split(/\r?\n/).forEach((line, index2) => record2(line, (code3.position?.start.line ?? 1) + index2 + 1));
+      code3.value.split(/\r?\n/).forEach((line, index2) => recordCommandTokens(line, (code3.position?.start.line ?? 1) + index2 + 1));
     } else if (node2.type === "tableCell") {
       const cell = node2;
       const values = [];
@@ -53973,6 +53976,16 @@ function proseText(node2) {
   });
   return parts.join(" ");
 }
+function listItemText(item) {
+  const parts = [];
+  visit(item, (descendant) => {
+    if (descendant.type === "list") return SKIP;
+    if (descendant.type === "text" || descendant.type === "inlineCode") {
+      parts.push(descendant.value);
+    }
+  });
+  return parts.join(" ");
+}
 function normalizeProseBlock(value) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -53988,7 +54001,7 @@ function substantiveBlocks(tree) {
     if (node2.type === "paragraph" && parent?.type !== "listItem") {
       record2(normalizeProseBlock(proseText(node2)));
     } else if (node2.type === "listItem") {
-      record2(normalizeProseBlock(proseText(node2)));
+      record2(normalizeProseBlock(listItemText(node2)));
     } else if (node2.type === "tableRow") {
       record2(normalizeProseBlock(proseText(node2)));
     } else if (node2.type === "code") {
@@ -54043,7 +54056,7 @@ function extractReferences(fromPath, tree, filePaths) {
 async function buildDocGraph(repoRoot, fileIndex, inventoryPaths = new Set(fileIndex.map((entry) => entry.path))) {
   const filePaths = inventoryPaths;
   const parsable = fileIndex.filter(
-    (entry) => inventoryPaths.has(entry.path) && (entry.kind === "doc" || entry.kind === "agent-context") && DOC_EXTENSIONS.has(path5.posix.extname(entry.path).toLowerCase())
+    (entry) => (entry.kind === "doc" || entry.kind === "agent-context") && DOC_EXTENSIONS.has(path5.posix.extname(entry.path).toLowerCase())
   );
   const references = [];
   const outbound = /* @__PURE__ */ new Map();
@@ -54064,6 +54077,7 @@ async function buildDocGraph(repoRoot, fileIndex, inventoryPaths = new Set(fileI
   const navReferenced = /* @__PURE__ */ new Set();
   for (const ref of references) {
     if (ref.external || ref.resolved === null || ref.broken) continue;
+    if (!inventoryPaths.has(ref.from)) continue;
     const bucket = ref.kind === "image" ? inboundImages : inboundLinks;
     const set2 = bucket.get(ref.resolved) ?? /* @__PURE__ */ new Set();
     set2.add(ref.from);
