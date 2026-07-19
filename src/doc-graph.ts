@@ -201,16 +201,22 @@ function extractExplicitMentions(fromPath: string, tree: Root, filePaths: Readon
     const reference = resolveDocumentPath(fromPath, token, line, inventory);
     if (reference !== null) mentions.push(reference);
   };
-  const recordCodeTokens = (value: string, line: number): void => {
+  // A code span or fenced line is split on whitespace so a path used as a
+  // command argument (`gunk scan docs/x.md`) is recognized, not just a span
+  // whose whole content is one path. Every token still passes the shared
+  // grammar/cue filter via `record` -> `resolveDocumentPath`, so command
+  // words that are not paths (flags, scoped packages, ratios, FFmpeg/glob
+  // expressions, MIME types) are rejected and never emit an assertion.
+  const recordCommandTokens = (value: string, line: number): void => {
     for (const token of value.split(/\s+/)) record(token, line);
   };
   visit(tree, (node) => {
     if (node.type === "inlineCode") {
       const inline = node as InlineCode;
-      recordCodeTokens(inline.value, inline.position?.start.line ?? 1);
+      recordCommandTokens(inline.value, inline.position?.start.line ?? 1);
     } else if (node.type === "code") {
       const code = node as Code;
-      code.value.split(/\r?\n/).forEach((line, index) => recordCodeTokens(line, (code.position?.start.line ?? 1) + index + 1));
+      code.value.split(/\r?\n/).forEach((line, index) => recordCommandTokens(line, (code.position?.start.line ?? 1) + index + 1));
     } else if (node.type === "tableCell") {
       const cell = node as TableCell;
       const values: string[] = [];

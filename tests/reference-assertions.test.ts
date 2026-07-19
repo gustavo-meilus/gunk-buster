@@ -59,6 +59,21 @@ describe("scan reference assertions (#54)", () => {
     }));
   });
 
+  it("recognizes only the real path in a command mixed with non-path arguments", async () => {
+    const root = await repo({
+      "README.md": "```sh\nnpm install @scope/pkg 16/9 text/plain scale=iw*min(1920/iw) docs/real.md\n```\n",
+      "docs/real.md": "# real\n",
+    });
+
+    const result = await assertions(root);
+    expect(result).toContainEqual(expect.objectContaining({
+      source: "document", sourcePath: "README.md", selector: "explicit-path", location: 2, target: "docs/real.md",
+    }));
+    for (const excluded of ["@scope/pkg", "16/9", "text/plain", "scale=iw*min(1920/iw)"]) {
+      expect(result).not.toContainEqual(expect.objectContaining({ sourcePath: "README.md", target: excluded }));
+    }
+  });
+
   it("only explicit document syntax proves a candidate live", async () => {
     const root = await repo({
       "README.md": "Ordinary prose docs/prose.md\n\n`docs/inline.md`\n\n```text\ndocs/fenced.md\n```\n\n| Path |\n| --- |\n| docs/table.md |\n",
