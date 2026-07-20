@@ -23,7 +23,6 @@ describe("claim exceptions — Radar engine and persistence (#53)", () => {
 
     await writeClaimException(repo, {
       path: "README.md",
-      line: finding!.line,
       check: "package-manager-drift",
       token: finding!.actual,
       contentHash,
@@ -57,7 +56,6 @@ describe("claim exceptions — Radar engine and persistence (#53)", () => {
     expect(finding?.actual).toBe("docs/missing.md");
     await writeClaimException(repo, {
       path: finding!.path,
-      line: finding!.line,
       check: finding!.check,
       token: finding!.actual,
       contentHash: finding!.contentHash!,

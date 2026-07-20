@@ -40,7 +40,6 @@ export async function writeClaimException(repoRoot: string, entry: ClaimExceptio
     ...ledger.exceptions.filter(
       (existing) =>
         existing.path !== entry.path ||
-        existing.line !== entry.line ||
         existing.check !== entry.check ||
         existing.token !== entry.token,
     ),
@@ -63,7 +62,6 @@ export function applyClaimExceptions(
     const exception = exceptions.find(
       (entry) =>
         entry.path === finding.path &&
-        entry.line === finding.line &&
         entry.check === finding.check &&
         entry.token === finding.actual &&
         entry.contentHash === finding.contentHash,

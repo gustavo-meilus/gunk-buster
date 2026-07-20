@@ -3,6 +3,8 @@ import {
   claimFindingSchema,
   CLAIM_LABELS,
   fileFindingSchema,
+  isActive,
+  isExcepted,
   LABELS,
   linkFindingSchema,
   brokenReferenceFindingSchema,
@@ -173,7 +175,7 @@ export function mergeFindings(
   }));
   return [
     ...liveScanFindings,
-    ...(radar?.findings.filter((finding) => finding.disposition !== "EXCEPTED") ?? []),
+    ...(radar?.findings.filter(isActive) ?? []),
     ...trappedRows,
   ];
 }
@@ -199,7 +201,7 @@ export function buildPileResult(
     repoRoot: scan.repoRoot,
     groups: groupFindings(mergeFindings(scan, radar, receipts)),
     ...(radar
-      ? { excepted: radar.findings.filter((finding) => finding.disposition === "EXCEPTED") }
+      ? { excepted: radar.findings.filter(isExcepted) }
       : {}),
   });
 }

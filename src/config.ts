@@ -72,8 +72,8 @@ const textReferenceSourceSchema = z.strictObject({
   ...commonReferenceSource,
   format: z.literal("text"),
   regex: z.string().refine((value) => {
-    try { return new RegExp(value).exec("")?.groups?.target !== undefined || /\(\?<target>/.test(value); }
-    catch { return false; }
+    try { new RegExp(value); } catch { return false; }
+    return /\(\?<target>/.test(value);
   }, "must be a valid regular expression with a named target capture"),
 });
 

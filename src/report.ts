@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { groupFindings, mergeFindings, type PileFinding } from "./pile.js";
 import {
+  isExcepted,
   radarResultSchema,
   scanResultSchema,
   type RadarResult,
@@ -80,7 +81,7 @@ function renderReportBody(scan: ScanResult, radar: RadarResult | undefined, find
   ];
 
   const groups = groupFindings(findings);
-  const excepted = radar?.findings.filter((finding) => finding.disposition === "EXCEPTED") ?? [];
+  const excepted = radar?.findings.filter(isExcepted) ?? [];
   if (groups.length === 0 && excepted.length === 0) {
     lines.push("No findings.");
     return `${lines.join("\n")}\n`;
@@ -147,7 +148,7 @@ export async function writeReport(
     repoRoot: scan.repoRoot,
     reportPath,
     findingsCount: findings.length,
-    ...(radar ? { exceptedCount: radar.findings.filter((finding) => finding.disposition === "EXCEPTED").length } : {}),
+    ...(radar ? { exceptedCount: radar.findings.filter(isExcepted).length } : {}),
     counts: scan.counts,
   });
 }

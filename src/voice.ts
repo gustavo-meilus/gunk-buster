@@ -5,6 +5,7 @@ import type { FixPlanItem, FixPlanResult } from "./radar.js";
 import type { PileFinding, PileResult } from "./pile.js";
 import type { ReportResult } from "./report.js";
 import type { RestoreResult } from "./restore.js";
+import { isActive, isExcepted } from "./schema.js";
 import type {
   BustResult,
   FileFinding,
@@ -56,8 +57,8 @@ export function renderScanHuman(voice: Voice, result: ScanResult, scanPath: stri
 
 export function renderRadarHuman(voice: Voice, result: RadarResult, radarPath: string): string {
   const rel = toRepoRelative(result.repoRoot, radarPath);
-  const active = result.findings.filter((finding) => finding.disposition !== "EXCEPTED");
-  const excepted = result.findings.filter((finding) => finding.disposition === "EXCEPTED");
+  const active = result.findings.filter(isActive);
+  const excepted = result.findings.filter(isExcepted);
   const count = pluralFindings(active.length);
 
   if (voice === "professional") {

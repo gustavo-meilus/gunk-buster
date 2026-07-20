@@ -50,18 +50,6 @@ export function hasUrlScheme(token: string): boolean {
   return EXTERNAL_SCHEME.test(token);
 }
 
-/**
- * Is `token` path-shaped: does it contain a `/` (spec)? A bare filename with
- * a familiar extension deliberately does NOT qualify — dogfooding showed
- * generic mentions (`CLAUDE.md`, `SKILL.md`, `yarn.lock` as concepts, not
- * repo claims) were ~85% of all false positives. Callers strip any leading
- * `/` before testing, so a slash-command never qualifies either.
- */
-export function isPathShaped(token: string): boolean {
-  const inventory = repositoryInventory(new Set());
-  return resolveDocumentPath("README.md", token, 1, inventory) !== null;
-}
-
 // Outer punctuation a token can pick up from surrounding prose-like
 // separators inside a code span/block (commas, colons, quotes, parens) is
 // trimmed before guard checks. Deliberately excludes glob/placeholder

@@ -123,10 +123,14 @@ export const claimFindingSchema = z.object({
   exceptionReason: z.string().min(1).optional(),
 });
 
-/** A single Chief-approved exception, scoped to one persisted Radar claim. */
+/**
+ * A single Chief-approved exception (ADR-0010): scoped to one persisted Radar
+ * claim by document, check, exact normalized token, and content hash — never
+ * by line, so the exception survives the claim moving within an unchanged
+ * document and expires only when the pinned content changes.
+ */
 export const claimExceptionSchema = z.object({
   path: z.string(),
-  line: z.int().positive(),
   check: z.string(),
   token: z.string().min(1),
   contentHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
@@ -337,3 +341,13 @@ export type ClaimFinding = z.infer<typeof claimFindingSchema>;
 export type RadarResult = z.infer<typeof radarResultSchema>;
 export type ClaimException = z.infer<typeof claimExceptionSchema>;
 export type ClaimExceptionLedger = z.infer<typeof claimExceptionLedgerSchema>;
+
+/** A claim finding excused by an active Chief exception — auditable only, never active remediation work. */
+export function isExcepted(finding: ClaimFinding): boolean {
+  return finding.disposition === "EXCEPTED";
+}
+
+/** A claim finding still needing remediation — everything an exception has not excused. */
+export function isActive(finding: ClaimFinding): boolean {
+  return finding.disposition !== "EXCEPTED";
+}

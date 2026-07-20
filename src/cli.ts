@@ -122,7 +122,6 @@ program
     const decidedAt = new Date().toISOString();
     await writeClaimException(root, {
       path: finding.path,
-      line: finding.line,
       check: finding.check,
       token: finding.actual,
       contentHash: finding.contentHash,

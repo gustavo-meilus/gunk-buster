@@ -202,11 +202,12 @@ describe("gunk except — content-pinned Radar claim exceptions (#53)", () => {
     expect(ledger.exceptions).toHaveLength(1);
     expect(ledger.exceptions[0]).toMatchObject({
       path: "README.md",
-      line: 3,
       check: "package-manager-drift",
       token: "npm install",
       reason: "The example intentionally demonstrates the migration.",
     });
+    // ADR-0010: the pin scope excludes line, so the exception survives the claim moving.
+    expect(ledger.exceptions[0]).not.toHaveProperty("line");
     const ledgerIsIgnored = await execFileAsync(
       "git",
       ["check-ignore", "-q", ".gunk-buster/claim-exceptions.json"],

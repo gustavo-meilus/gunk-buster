@@ -19,6 +19,7 @@ import { hashIndexedFile } from "./file-index.js";
 import type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
 import {
   CLAIM_LABELS,
+  isActive,
   radarResultSchema,
   suggestionSchema,
   type ClaimFinding,
@@ -86,7 +87,7 @@ export function summarizeRadarCounts(findings: readonly ClaimFinding[]): RadarRe
   const byCheck: Record<string, number> = {};
 
   for (const finding of findings) {
-    if (finding.disposition === "EXCEPTED") continue;
+    if (!isActive(finding)) continue;
     byLabel[finding.label] = (byLabel[finding.label] ?? 0) + 1;
     byCheck[finding.check] = (byCheck[finding.check] ?? 0) + 1;
   }
@@ -280,7 +281,7 @@ export type FixPlanResult = z.infer<typeof fixPlanResultSchema>;
 export function buildFixPlan(radar: RadarResult): FixPlanResult {
   const items = radar.findings
     .filter((finding): finding is ClaimFinding & { suggestion: NonNullable<ClaimFinding["suggestion"]> } =>
-      finding.disposition !== "EXCEPTED" && finding.suggestion !== undefined,
+      isActive(finding) && finding.suggestion !== undefined,
     )
     .map((finding) => ({
       path: finding.path,

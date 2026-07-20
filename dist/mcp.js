@@ -41170,10 +41170,11 @@ var textReferenceSourceSchema = external_exports.strictObject({
   format: external_exports.literal("text"),
   regex: external_exports.string().refine((value) => {
     try {
-      return new RegExp(value).exec("")?.groups?.target !== void 0 || /\(\?<target>/.test(value);
+      new RegExp(value);
     } catch {
       return false;
     }
+    return /\(\?<target>/.test(value);
   }, "must be a valid regular expression with a named target capture")
 });
 var referenceSourceSchema = external_exports.discriminatedUnion("format", [
@@ -41332,7 +41333,6 @@ var claimFindingSchema = external_exports.object({
 });
 var claimExceptionSchema = external_exports.object({
   path: external_exports.string(),
-  line: external_exports.int().positive(),
   check: external_exports.string(),
   token: external_exports.string().min(1),
   contentHash: external_exports.string().regex(/^sha256:[0-9a-f]{64}$/),
@@ -41444,6 +41444,12 @@ var fixResultSchema = external_exports.object({
   applied: external_exports.array(fixAppliedSchema),
   skipped: external_exports.array(fixSkipSchema)
 });
+function isExcepted(finding) {
+  return finding.disposition === "EXCEPTED";
+}
+function isActive(finding) {
+  return finding.disposition !== "EXCEPTED";
+}
 
 // src/pile.ts
 var LINK_GROUP_LABEL = "LINK";
@@ -41528,7 +41534,7 @@ function mergeFindings(scan2, radar2, receipts) {
   }));
   return [
     ...liveScanFindings,
-    ...radar2?.findings.filter((finding) => finding.disposition !== "EXCEPTED") ?? [],
+    ...radar2?.findings.filter(isActive) ?? [],
     ...trappedRows
   ];
 }
@@ -41539,7 +41545,7 @@ function buildPileResult(scan2, radar2, receipts) {
     ...radar2 ? { radarScannedAt: radar2.scannedAt } : {},
     repoRoot: scan2.repoRoot,
     groups: groupFindings(mergeFindings(scan2, radar2, receipts)),
-    ...radar2 ? { excepted: radar2.findings.filter((finding) => finding.disposition === "EXCEPTED") } : {}
+    ...radar2 ? { excepted: radar2.findings.filter(isExcepted) } : {}
   });
 }
 
@@ -54680,7 +54686,7 @@ async function loadClaimExceptionLedger(repoRoot) {
 function applyClaimExceptions(findings, exceptions) {
   return findings.map((finding) => {
     const exception = exceptions.find(
-      (entry) => entry.path === finding.path && entry.line === finding.line && entry.check === finding.check && entry.token === finding.actual && entry.contentHash === finding.contentHash
+      (entry) => entry.path === finding.path && entry.check === finding.check && entry.token === finding.actual && entry.contentHash === finding.contentHash
     );
     return exception === void 0 ? { ...finding, disposition: "ACTIVE" } : { ...finding, disposition: "EXCEPTED", exceptionReason: exception.reason };
   });
@@ -54715,7 +54721,7 @@ function summarizeRadarCounts(findings) {
   const byLabel = {};
   const byCheck = {};
   for (const finding of findings) {
-    if (finding.disposition === "EXCEPTED") continue;
+    if (!isActive(finding)) continue;
     byLabel[finding.label] = (byLabel[finding.label] ?? 0) + 1;
     byCheck[finding.check] = (byCheck[finding.check] ?? 0) + 1;
   }
@@ -54776,7 +54782,7 @@ var fixPlanResultSchema = external_exports.object({
 });
 function buildFixPlan(radar2) {
   const items = radar2.findings.filter(
-    (finding) => finding.disposition !== "EXCEPTED" && finding.suggestion !== void 0
+    (finding) => isActive(finding) && finding.suggestion !== void 0
   ).map((finding) => ({
     path: finding.path,
     line: finding.line,
@@ -54842,7 +54848,7 @@ function renderReportBody(scan2, radar2, findings) {
     ""
   ];
   const groups = groupFindings(findings);
-  const excepted = radar2?.findings.filter((finding) => finding.disposition === "EXCEPTED") ?? [];
+  const excepted = radar2?.findings.filter(isExcepted) ?? [];
   if (groups.length === 0 && excepted.length === 0) {
     lines.push("No findings.");
     return `${lines.join("\n")}

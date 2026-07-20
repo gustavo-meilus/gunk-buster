@@ -3,10 +3,15 @@ import {
   hasGlobChars,
   hasPlaceholderSyntax,
   hasUrlScheme,
-  isPathShaped,
 } from "../src/checks/dead-paths.js";
+import { repositoryInventory, resolveDocumentPath } from "../src/document-path.js";
 
-describe("isPathShaped(token) — the path-shaped candidacy test", () => {
+// Path-shaped candidacy against an empty inventory: only a token's own shape
+// (an explicit anchor or a filename-like extension) can make it a claim.
+const isPathShaped = (token: string): boolean =>
+  resolveDocumentPath("README.md", token, 1, repositoryInventory(new Set())) !== null;
+
+describe("resolveDocumentPath candidacy — the path-shaped candidacy test", () => {
   it("requires more than a slash and accepts a filename-like extension cue", () => {
     expect(isPathShaped("src/index.ts")).toBe(true);
     expect(isPathShaped("docs/")).toBe(false);
