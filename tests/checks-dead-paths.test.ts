@@ -28,6 +28,22 @@ describe("resolveDocumentPath candidacy — the path-shaped candidacy test", () 
     expect(isPathShaped("radar")).toBe(false);
   });
 
+  it("rejects a plain word in a nested document even though its containing directory is tracked", () => {
+    // docs/guide.md is indexed, so "docs" is a live directory — the same
+    // directory that "banana" would trivially resolve under. That must not,
+    // by itself, make "banana" path-shaped.
+    const inventory = repositoryInventory(new Set(["docs/guide.md"]));
+    expect(resolveDocumentPath("docs/guide.md", "banana", 1, inventory)).toBeNull();
+  });
+
+  it("accepts a plain word whose ancestor is live strictly under the resolution base", () => {
+    // docs/sub/other.md is indexed, so "docs/sub" is a live directory that is
+    // genuinely nested under the base ("docs"), not the base itself — this
+    // must still count as an ancestor cue.
+    const inventory = repositoryInventory(new Set(["docs/guide.md", "docs/sub/other.md"]));
+    expect(resolveDocumentPath("docs/guide.md", "sub/thing", 1, inventory)).not.toBeNull();
+  });
+
   it("rejects a dotfile", () => {
     expect(isPathShaped(".gitignore")).toBe(false);
   });

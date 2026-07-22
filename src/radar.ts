@@ -6,15 +6,15 @@ import { contextBloatCheck } from "./checks/context-bloat.js";
 import { deadCommandCheck } from "./checks/dead-command.js";
 import { deadPathCheck } from "./checks/dead-paths.js";
 import { packageManagerDriftCheck } from "./checks/package-manager-drift.js";
-import { loadConfig, type GunkConfig } from "./config.js";
+import { loadConfig, type GunkConfig, type Voice } from "./config.js";
 import { buildDocGraph } from "./doc-graph.js";
-import { GunkError } from "./errors.js";
+import { GunkError, refuse } from "./errors.js";
 import { buildFileIndex, readIndexedFile, type FileEntry } from "./file-index.js";
 import { buildGitIndex } from "./git-index.js";
 import { resolveRepoRoot } from "./git.js";
 import { GUNK_BUSTER_GITIGNORE } from "./gunk-buster-dir.js";
 import { buildPackageGraph } from "./package-graph.js";
-import { applyClaimExceptions, loadClaimExceptionLedger } from "./claim-exceptions.js";
+import { applyClaimExceptions, loadClaimExceptionLedger, writeClaimException } from "./claim-exceptions.js";
 import { hashIndexedFile } from "./file-index.js";
 import type { AuditFile, RadarCheck, RadarContext } from "./radar-check.js";
 import {
@@ -299,4 +299,100 @@ export function buildFixPlan(radar: RadarResult): FixPlanResult {
     repoRoot: radar.repoRoot,
     items,
   });
+}
+
+/** What `gunk except` pins: the exact persisted claim to except, and why. */
+export interface ExceptClaimInput {
+  path: string;
+  check: string;
+  token: string;
+  line: number;
+  reason: string;
+}
+
+export interface ExceptClaimResult {
+  result: RadarResult;
+  /** The one finding that changed, already carrying its EXCEPTED disposition — callers never re-derive it with their own copy of the match predicate. */
+  finding: ClaimFinding;
+}
+
+/**
+ * Find the persisted, active claim finding `gunk except` should pin, or
+ * refuse. Exact match on path, line, check, and token (spec: the pin scope
+ * is precise) — an already-EXCEPTED finding is never a match, since
+ * excepting an exception makes no sense.
+ */
+function findExceptableFinding(persisted: RadarResult, input: ExceptClaimInput, voice: Voice): ClaimFinding {
+  const finding = persisted.findings.find(
+    (candidate) =>
+      candidate.path === input.path &&
+      candidate.line === input.line &&
+      candidate.check === input.check &&
+      candidate.actual === input.token &&
+      candidate.disposition !== "EXCEPTED",
+  );
+
+  if (finding === undefined || finding.contentHash === undefined) {
+    refuse(
+      voice,
+      "That exact active persisted Radar claim is not on the board, Chief.",
+      "no matching active persisted Radar claim found.",
+    );
+  }
+
+  return finding;
+}
+
+/**
+ * The engine seam for `gunk except`: pin a content-scoped exception to one
+ * exact persisted Radar claim finding (ADR-0010), persist the updated radar
+ * index, and return it alongside the specific finding that changed.
+ *
+ * `input.path` must already be repo-relative, forward-slash (the same shape
+ * radar.json's finding paths use) — the caller (the CLI) is responsible for
+ * turning a user-supplied path into that shape.
+ */
+export async function exceptClaim(
+  repoRoot: string,
+  input: ExceptClaimInput,
+  opts: { config?: GunkConfig } = {},
+): Promise<ExceptClaimResult> {
+  const root = await resolveRepoRoot(repoRoot);
+  const config = opts.config ?? (await loadConfig(root));
+  const reason = input.reason.trim();
+  if (reason === "") {
+    refuse(config.voice, "An exception needs a reason, Chief.", "exception reason must not be empty.");
+  }
+
+  const persisted = await loadRadarResult(root);
+  const finding = findExceptableFinding(persisted, input, config.voice);
+
+  const currentHash = await hashIndexedFile(root, finding.path);
+  if (currentHash !== finding.contentHash) {
+    refuse(
+      config.voice,
+      "That claim's document changed; run gunk radar again, Chief.",
+      "persisted Radar claim is stale; run gunk radar again.",
+    );
+  }
+
+  const decidedAt = new Date().toISOString();
+  await writeClaimException(root, {
+    path: finding.path,
+    check: finding.check,
+    token: finding.actual,
+    contentHash: finding.contentHash,
+    reason,
+    decidedAt,
+  });
+
+  const exceptedFinding: ClaimFinding = { ...finding, disposition: "EXCEPTED", exceptionReason: reason };
+  const updated: RadarResult = {
+    ...persisted,
+    findings: persisted.findings.map((candidate) => (candidate === finding ? exceptedFinding : candidate)),
+  };
+  updated.counts = summarizeRadarCounts(updated.findings);
+  await persistRadarResult(updated);
+
+  return { result: updated, finding: exceptedFinding };
 }

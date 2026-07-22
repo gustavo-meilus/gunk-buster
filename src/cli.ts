@@ -10,10 +10,8 @@ import { GunkError, refuse } from "./errors.js";
 import { fix } from "./fix.js";
 import { resolveRepoRoot } from "./git.js";
 import { writeKeep } from "./keeps.js";
-import { writeClaimException } from "./claim-exceptions.js";
-import { hashIndexedFile } from "./file-index.js";
 import { buildPileResult } from "./pile.js";
-import { buildFixPlan, loadRadarResult, persistRadarResult, radar, summarizeRadarCounts, tryLoadRadarResult } from "./radar.js";
+import { buildFixPlan, exceptClaim, loadRadarResult, persistRadarResult, radar, tryLoadRadarResult } from "./radar.js";
 import { writeReport } from "./report.js";
 import { loadScanResult, persistScanResult, scan } from "./scan.js";
 import type { RadarResult, ScanResult, TrapReceipt } from "./schema.js";
@@ -101,42 +99,14 @@ program
     const root = await resolveRepoRoot(process.cwd());
     const config = await loadConfig(root);
     const relPath = toFindingPath(root, process.cwd(), pathArg);
-    const reason = options.reason.trim();
-    if (reason === "") refuse(config.voice, "An exception needs a reason, Chief.", "exception reason must not be empty.");
-    const persisted = await loadRadarResult(root);
-    const finding = persisted.findings.find(
-      (candidate) =>
-        candidate.path === relPath &&
-        candidate.line === options.line &&
-        candidate.check === check &&
-        candidate.actual === token &&
-        candidate.disposition !== "EXCEPTED",
+
+    const { finding } = await exceptClaim(
+      root,
+      { path: relPath, check, token, line: options.line, reason: options.reason },
+      { config },
     );
-    if (finding === undefined || finding.contentHash === undefined) {
-      refuse(config.voice, "That exact active persisted Radar claim is not on the board, Chief.", "no matching active persisted Radar claim found.");
-    }
-    const currentHash = await hashIndexedFile(root, relPath);
-    if (currentHash !== finding.contentHash) {
-      refuse(config.voice, "That claim's document changed; run gunk radar again, Chief.", "persisted Radar claim is stale; run gunk radar again.");
-    }
-    const decidedAt = new Date().toISOString();
-    await writeClaimException(root, {
-      path: finding.path,
-      check: finding.check,
-      token: finding.actual,
-      contentHash: finding.contentHash,
-      reason,
-      decidedAt,
-    });
-    const updated: RadarResult = {
-      ...persisted,
-      findings: persisted.findings.map((candidate) =>
-        candidate === finding ? { ...candidate, disposition: "EXCEPTED", exceptionReason: reason } : candidate,
-      ),
-    };
-    updated.counts = summarizeRadarCounts(updated.findings);
-    await persistRadarResult(updated);
-    if (options.json) printJson(updated.findings.find((candidate) => candidate.disposition === "EXCEPTED" && candidate.path === relPath && candidate.line === options.line && candidate.check === check && candidate.actual === token));
+
+    if (options.json) printJson(finding);
     else process.stdout.write(`Excepted: ${relPath} (${check}) — pinned to current content.\n`);
   });
 

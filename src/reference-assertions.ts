@@ -61,8 +61,21 @@ function select(value: unknown, selector: string): { failures: number; values: S
   return { failures, values };
 }
 
-function jsonPointer(path: readonly (string | number)[]): string {
+export function jsonPointer(path: readonly (string | number)[]): string {
   return path.map((segment) => `/${String(segment).replace(/~/g, "~0").replace(/\//g, "~1")}`).join("");
+}
+
+/** The shared shape every unresolved/nonexistent target reports as (spec: CERTAIN confidence, one rationale sentence). */
+function brokenReference(path: string, target: string, source: string, selector: string, rationale: string, line?: number): BrokenReferenceFinding {
+  return {
+    type: "reference",
+    path,
+    target,
+    source,
+    selector,
+    ...(line ? { line } : {}),
+    evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale }],
+  };
 }
 
 function targetPath(sourcePath: string, target: string, resolveFrom: "source-directory" | "repository-root"): string | null {
@@ -87,11 +100,11 @@ export async function buildConfiguredAssertions(repoRoot: string, entries: reado
     }
     const target = targetPath(sourcePath, raw, definition.resolveFrom);
     if (target === null) {
-      broken.push({ type: "reference", path: sourcePath, target: raw, source: definition.name, selector, ...(line ? { line } : {}), evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${raw}" cannot resolve inside the repository` }] });
+      broken.push(brokenReference(sourcePath, raw, definition.name, selector, `target "${raw}" cannot resolve inside the repository`, line));
     } else if (repositoryPaths.files.has(target) || repositoryPaths.directories.has(target)) {
       assertions.push({ source: definition.name, sourcePath, selector, ...(line ? { location: line } : {}), target });
     } else {
-      broken.push({ type: "reference", path: sourcePath, target, source: definition.name, selector, ...(line ? { line } : {}), evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${target}" does not exist` }] });
+      broken.push(brokenReference(sourcePath, target, definition.name, selector, `target "${target}" does not exist`, line));
     }
   };
 
@@ -147,7 +160,15 @@ export async function buildConfiguredAssertions(repoRoot: string, entries: reado
     if (invalid.length > 0) {
       for (const target of invalid) {
         const exists = inventory.has(target);
-        broken.push({ type: "reference", path: "gunk.config.json", target, source: "copy-relationship", selector, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: exists ? `copy relationship target "${target}" is not a document` : `copy relationship target "${target}" does not exist` }] });
+        broken.push(
+          brokenReference(
+            "gunk.config.json",
+            target,
+            "copy-relationship",
+            selector,
+            exists ? `copy relationship target "${target}" is not a document` : `copy relationship target "${target}" does not exist`,
+          ),
+        );
       }
       continue;
     }

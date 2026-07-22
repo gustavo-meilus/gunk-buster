@@ -1,0 +1,5 @@
+# Intentional copies are declared relationships
+
+An intentional derivative is related explicitly to its canonical document rather than protected or broadly excluded from ECHO detection. The relationship emits a reference assertion to the derivative and prevents ECHO only for the declared pair; all other duplicate comparisons remain eligible. It is a human-authored `gunk.config.json` entry naming the canonical path, derivative path, and required reason. Because it declares enduring repository architecture rather than adjudicating one generated finding, it persists across content changes until the Chief removes it. If either endpoint is missing, it emits a broken-reference finding and provides neither suppression nor a liveness assertion. This preserves the meaning of protections as action-safety facts while making known-live architectural duplication precise and inspectable.
+
+Relationships live under `references.copies` alongside other reference-producing declarations, with fields `canonical`, `derivative`, and `reason`.

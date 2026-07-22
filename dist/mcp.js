@@ -53844,9 +53844,9 @@ function repositoryInventory(files) {
   }
   return { files, directories };
 }
-function hasLiveAncestor(target, inventory) {
+function hasLiveAncestor(target, base, inventory) {
   let current = path4.posix.dirname(target);
-  while (current !== "." && current !== "") {
+  while (current !== "." && current !== "" && current !== base) {
     if (inventory.directories.has(current)) return true;
     current = path4.posix.dirname(current);
   }
@@ -53867,7 +53867,7 @@ function resolveDocumentPath(sourcePath, rawToken, line, inventory, explicitSynt
   const resolvedTarget = path4.posix.normalize(path4.posix.join(base, withoutTrailing));
   if (resolvedTarget === "." || resolvedTarget === "" || resolvedTarget === ".." || resolvedTarget.startsWith("../")) return null;
   const rootAnchorCue = repositoryAnchored && (withoutTrailing.includes("/") || FILE_EXTENSION.test(withoutTrailing));
-  const hasCue = explicitSyntax || rootAnchorCue || explicitlyRelative || FILE_EXTENSION.test(withoutTrailing) || hasLiveAncestor(resolvedTarget, inventory);
+  const hasCue = explicitSyntax || rootAnchorCue || explicitlyRelative || FILE_EXTENSION.test(withoutTrailing) || hasLiveAncestor(resolvedTarget, base, inventory);
   if (!hasCue) return null;
   return {
     sourcePath,
@@ -53877,6 +53877,48 @@ function resolveDocumentPath(sourcePath, rawToken, line, inventory, explicitSynt
     resolvedTarget,
     live: inventory.files.has(resolvedTarget) || inventory.directories.has(resolvedTarget)
   };
+}
+var LEADING_PUNCTUATION = /^['",;:()]+/;
+var TRAILING_PUNCTUATION = /['",;:.()]+$/;
+function tokenize(text5) {
+  return text5.split(/\s+/).map((raw) => raw.replace(LEADING_PUNCTUATION, "").replace(TRAILING_PUNCTUATION, "")).filter((token) => token.length > 0);
+}
+function extractExplicitPathMentions(tree) {
+  const mentions = [];
+  visit(tree, (node2) => {
+    if (node2.type === "inlineCode") {
+      const value = node2.value;
+      const line = node2.position?.start.line ?? 1;
+      for (const token of tokenize(value)) mentions.push({ token, line });
+      return;
+    }
+    if (node2.type === "code") {
+      const codeNode = node2;
+      const start = codeNode.position?.start.line ?? 1;
+      const end = codeNode.position?.end.line ?? start;
+      const lines = codeNode.value.split("\n");
+      const isFenced = end - start - 1 === lines.length;
+      const firstContentLine = isFenced ? start + 1 : start;
+      lines.forEach((lineText, index2) => {
+        for (const token of tokenize(lineText)) {
+          mentions.push({ token, line: firstContentLine + index2 });
+        }
+      });
+      return;
+    }
+    if (node2.type === "tableCell") {
+      const cell = node2;
+      const values = [];
+      visit(cell, (child) => {
+        if (child.type === "text" || child.type === "inlineCode") values.push(child.value);
+      });
+      const line = cell.position?.start.line ?? 1;
+      const cellTokens = tokenize(values.join(""));
+      const [token] = cellTokens;
+      if (token !== void 0 && cellTokens.length === 1) mentions.push({ token, line });
+    }
+  });
+  return mentions;
 }
 
 // src/doc-graph.ts
@@ -53941,56 +53983,19 @@ function parseMarkdown(content3) {
 function extractExplicitMentions(fromPath, tree, filePaths) {
   const inventory = repositoryInventory(filePaths);
   const mentions = [];
-  const record2 = (token, line) => {
+  for (const { token, line } of extractExplicitPathMentions(tree)) {
     const reference = resolveDocumentPath(fromPath, token, line, inventory);
     if (reference !== null) mentions.push(reference);
-  };
-  const recordCommandTokens = (value, line) => {
-    for (const token of value.split(/\s+/)) record2(token, line);
-  };
-  visit(tree, (node2) => {
-    if (node2.type === "inlineCode") {
-      const inline = node2;
-      recordCommandTokens(inline.value, inline.position?.start.line ?? 1);
-    } else if (node2.type === "code") {
-      const code3 = node2;
-      code3.value.split(/\r?\n/).forEach((line, index2) => recordCommandTokens(line, (code3.position?.start.line ?? 1) + index2 + 1));
-    } else if (node2.type === "tableCell") {
-      const cell = node2;
-      const values = [];
-      visit(cell, (child) => {
-        if (child.type === "text" || child.type === "inlineCode") values.push(child.value);
-      });
-      record2(values.join(""), cell.position?.start.line ?? 1);
-    }
-  });
+  }
   return mentions;
 }
-function headingText(heading2) {
-  const parts = [];
-  visit(heading2, (node2) => {
-    if (node2.type === "text" || node2.type === "inlineCode") {
-      parts.push(node2.value);
-    }
-  });
-  return parts.join("");
-}
-function proseText(node2) {
+function textOf(node2, { join: join2, skipNestedLists = false }) {
   const parts = [];
   visit(node2, (child) => {
+    if (skipNestedLists && child.type === "list") return SKIP;
     if (child.type === "text" || child.type === "inlineCode") parts.push(child.value);
   });
-  return parts.join(" ");
-}
-function listItemText(item) {
-  const parts = [];
-  visit(item, (descendant) => {
-    if (descendant.type === "list") return SKIP;
-    if (descendant.type === "text" || descendant.type === "inlineCode") {
-      parts.push(descendant.value);
-    }
-  });
-  return parts.join(" ");
+  return parts.join(join2);
 }
 function normalizeProseBlock(value) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -54005,11 +54010,11 @@ function substantiveBlocks(tree) {
   };
   visit(tree, (node2, _index, parent) => {
     if (node2.type === "paragraph" && parent?.type !== "listItem") {
-      record2(normalizeProseBlock(proseText(node2)));
+      record2(normalizeProseBlock(textOf(node2, { join: " " })));
     } else if (node2.type === "listItem") {
-      record2(normalizeProseBlock(listItemText(node2)));
+      record2(normalizeProseBlock(textOf(node2, { join: " ", skipNestedLists: true })));
     } else if (node2.type === "tableRow") {
-      record2(normalizeProseBlock(proseText(node2)));
+      record2(normalizeProseBlock(textOf(node2, { join: " " })));
     } else if (node2.type === "code") {
       record2(normalizeCodeBlock(node2.value));
     }
@@ -54020,7 +54025,7 @@ function structureFromTree(tree) {
   let title = null;
   const headings = [];
   visit(tree, "heading", (node2) => {
-    const text5 = headingText(node2);
+    const text5 = textOf(node2, { join: "" });
     if (title === null && node2.depth === 1) {
       title = text5;
     } else {
@@ -54477,36 +54482,9 @@ function hasPlaceholderSyntax(token) {
 function hasUrlScheme(token) {
   return EXTERNAL_SCHEME.test(token);
 }
-var LEADING_PUNCTUATION = /^['",;:()]+/;
-var TRAILING_PUNCTUATION = /['",;:.()]+$/;
-function tokenize(text5) {
-  return text5.split(/\s+/).map((raw) => raw.replace(LEADING_PUNCTUATION, "").replace(TRAILING_PUNCTUATION, "")).filter((token) => token.length > 0);
-}
 function extractPathMentions(content3) {
-  const tree = remark().parse(content3);
-  const mentions = [];
-  visit(tree, (node2) => {
-    if (node2.type === "inlineCode") {
-      const value = node2.value;
-      const line = node2.position?.start.line ?? 1;
-      for (const token of tokenize(value)) mentions.push({ token, line });
-      return;
-    }
-    if (node2.type === "code") {
-      const codeNode = node2;
-      const start = codeNode.position?.start.line ?? 1;
-      const end = codeNode.position?.end.line ?? start;
-      const lines = codeNode.value.split("\n");
-      const isFenced = end - start - 1 === lines.length;
-      const firstContentLine = isFenced ? start + 1 : start;
-      lines.forEach((lineText, index2) => {
-        for (const token of tokenize(lineText)) {
-          mentions.push({ token, line: firstContentLine + index2 });
-        }
-      });
-    }
-  });
-  return mentions;
+  const tree = remark().use(remarkGfm).parse(content3);
+  return extractExplicitPathMentions(tree);
 }
 function brokenLinkTargetsOf(ctx, filePath) {
   return new Set(
@@ -55070,11 +55048,14 @@ function hasInboundFromOthers(inbound, entry) {
   if (sources === void 0) return false;
   return [...sources].some((source) => source !== entry.path);
 }
+function hasAssertionFromOthers(assertions, entry) {
+  return assertions.some((assertion) => assertion.target === entry.path && assertion.sourcePath !== entry.path);
+}
 function unreferencedEvidence(entry, ctx) {
   if (entry.kind !== "doc" && entry.kind !== "asset") return [];
   if (isReadmeFile(entry.path) || isNavFile(entry.path)) return [];
   const { docGraph, references } = ctx;
-  const referenced = hasInboundFromOthers(docGraph.inboundLinks, entry) || hasInboundFromOthers(docGraph.inboundImages, entry) || docGraph.navReferenced.has(entry.path) || docGraph.readmeReferenced.has(entry.path) || references.referenced.has(entry.path);
+  const referenced = hasInboundFromOthers(docGraph.inboundLinks, entry) || hasInboundFromOthers(docGraph.inboundImages, entry) || docGraph.navReferenced.has(entry.path) || docGraph.readmeReferenced.has(entry.path) || hasAssertionFromOthers(references.assertions, entry);
   if (referenced) return [];
   return [
     {
@@ -55942,6 +55923,17 @@ function select(value, selector) {
 function jsonPointer(path16) {
   return path16.map((segment) => `/${String(segment).replace(/~/g, "~0").replace(/\//g, "~1")}`).join("");
 }
+function brokenReference(path16, target, source, selector, rationale, line) {
+  return {
+    type: "reference",
+    path: path16,
+    target,
+    source,
+    selector,
+    ...line ? { line } : {},
+    evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale }]
+  };
+}
 function targetPath(sourcePath, target, resolveFrom) {
   const normalized = target.replace(/\\/g, "/");
   const base = resolveFrom === "source-directory" ? path13.posix.dirname(sourcePath) : "";
@@ -55962,11 +55954,11 @@ async function buildConfiguredAssertions(repoRoot, entries, inventory, config2) 
     }
     const target = targetPath(sourcePath, raw, definition3.resolveFrom);
     if (target === null) {
-      broken.push({ type: "reference", path: sourcePath, target: raw, source: definition3.name, selector, ...line ? { line } : {}, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${raw}" cannot resolve inside the repository` }] });
+      broken.push(brokenReference(sourcePath, raw, definition3.name, selector, `target "${raw}" cannot resolve inside the repository`, line));
     } else if (repositoryPaths.files.has(target) || repositoryPaths.directories.has(target)) {
       assertions.push({ source: definition3.name, sourcePath, selector, ...line ? { location: line } : {}, target });
     } else {
-      broken.push({ type: "reference", path: sourcePath, target, source: definition3.name, selector, ...line ? { line } : {}, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: `target "${target}" does not exist` }] });
+      broken.push(brokenReference(sourcePath, target, definition3.name, selector, `target "${target}" does not exist`, line));
     }
   };
   for (const definition3 of config2.references.sources) {
@@ -56030,7 +56022,15 @@ async function buildConfiguredAssertions(repoRoot, entries, inventory, config2) 
     if (invalid2.length > 0) {
       for (const target of invalid2) {
         const exists = inventory.has(target);
-        broken.push({ type: "reference", path: "gunk.config.json", target, source: "copy-relationship", selector, evidence: [{ rule: "broken-reference", confidence: "CERTAIN", rationale: exists ? `copy relationship target "${target}" is not a document` : `copy relationship target "${target}" does not exist` }] });
+        broken.push(
+          brokenReference(
+            "gunk.config.json",
+            target,
+            "copy-relationship",
+            selector,
+            exists ? `copy relationship target "${target}" is not a document` : `copy relationship target "${target}" does not exist`
+          )
+        );
       }
       continue;
     }
@@ -56079,7 +56079,7 @@ async function packageScriptMentions(repoRoot, packageJsonPath, candidatePaths, 
   }
   for (const [name, value] of Object.entries(scripts)) {
     if (typeof value !== "string") continue;
-    const pointer = `/scripts/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+    const pointer = jsonPointer(["scripts", name]);
     retainMentionAssertions(assertionsFromMentions("package-script", packageJsonPath, `scripts.${name}`, value, candidatePaths, (pointers[pointer]?.value.line ?? 0) + 1, true), assertions, into);
   }
 }

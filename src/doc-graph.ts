@@ -1,11 +1,11 @@
 import path from "node:path";
-import type { Code, Definition, Heading, Image, ImageReference, InlineCode, Link, LinkReference, ListItem, Root, TableCell } from "mdast";
+import type { Code, Definition, Heading, Image, ImageReference, Link, LinkReference, ListItem, Root } from "mdast";
 import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import { SKIP, visit } from "unist-util-visit";
 import { DOC_EXTENSIONS, readIndexedFile, type FileEntry } from "./file-index.js";
 import type { LinkFinding } from "./schema.js";
-import { repositoryInventory, resolveDocumentPath } from "./document-path.js";
+import { extractExplicitPathMentions, repositoryInventory, resolveDocumentPath } from "./document-path.js";
 
 /**
  * The markdown/doc graph — the third scan graph (see docs/specs/mvp-1-scan.md):
@@ -194,73 +194,30 @@ function parseMarkdown(content: string): Root {
   return remark().use(remarkGfm).parse(content) as Root;
 }
 
+/** Delegate to the shared explicit-path-mention extractor, then resolve each token (spec: "Document path contract"). */
 function extractExplicitMentions(fromPath: string, tree: Root, filePaths: ReadonlySet<string>): import("./document-path.js").DocumentPathReference[] {
   const inventory = repositoryInventory(filePaths);
   const mentions: import("./document-path.js").DocumentPathReference[] = [];
-  const record = (token: string, line: number): void => {
+  for (const { token, line } of extractExplicitPathMentions(tree)) {
     const reference = resolveDocumentPath(fromPath, token, line, inventory);
     if (reference !== null) mentions.push(reference);
-  };
-  // A code span or fenced line is split on whitespace so a path used as a
-  // command argument (`gunk scan docs/x.md`) is recognized, not just a span
-  // whose whole content is one path. Every token still passes the shared
-  // grammar/cue filter via `record` -> `resolveDocumentPath`, so command
-  // words that are not paths (flags, scoped packages, ratios, FFmpeg/glob
-  // expressions, MIME types) are rejected and never emit an assertion.
-  const recordCommandTokens = (value: string, line: number): void => {
-    for (const token of value.split(/\s+/)) record(token, line);
-  };
-  visit(tree, (node) => {
-    if (node.type === "inlineCode") {
-      const inline = node as InlineCode;
-      recordCommandTokens(inline.value, inline.position?.start.line ?? 1);
-    } else if (node.type === "code") {
-      const code = node as Code;
-      code.value.split(/\r?\n/).forEach((line, index) => recordCommandTokens(line, (code.position?.start.line ?? 1) + index + 1));
-    } else if (node.type === "tableCell") {
-      const cell = node as TableCell;
-      const values: string[] = [];
-      visit(cell, (child) => { if (child.type === "text" || child.type === "inlineCode") values.push((child as { value: string }).value); });
-      record(values.join(""), cell.position?.start.line ?? 1);
-    }
-  });
+  }
   return mentions;
 }
 
 /**
- * The visible text of one heading node: its text and inline-code children,
- * concatenated in order. Emphasis/strong wrappers contribute their inner
- * text; links inside a heading contribute their label, not their URL.
+ * The visible text and inline-code children of one node, concatenated in
+ * order. Emphasis/strong wrappers contribute their inner text; links
+ * contribute their label, not their URL. `skipNestedLists` excludes a list
+ * item's own nested sub-lists from its text.
  */
-function headingText(heading: Heading): string {
-  const parts: string[] = [];
-  visit(heading, (node) => {
-    if (node.type === "text" || node.type === "inlineCode") {
-      parts.push((node as { value: string }).value);
-    }
-  });
-  return parts.join("");
-}
-
-/** Pull the title/heading skeleton out of a parsed markdown tree. */
-function proseText(node: Root["children"][number]): string {
+function textOf(node: Heading | ListItem | Root["children"][number], { join, skipNestedLists = false }: { join: string; skipNestedLists?: boolean }): string {
   const parts: string[] = [];
   visit(node, (child) => {
+    if (skipNestedLists && child.type === "list") return SKIP;
     if (child.type === "text" || child.type === "inlineCode") parts.push((child as { value: string }).value);
   });
-  return parts.join(" ");
-}
-
-/** Text owned by one list item, excluding nested list items. */
-function listItemText(item: ListItem): string {
-  const parts: string[] = [];
-  visit(item, (descendant) => {
-    if (descendant.type === "list") return SKIP;
-    if (descendant.type === "text" || descendant.type === "inlineCode") {
-      parts.push((descendant as { value: string }).value);
-    }
-  });
-  return parts.join(" ");
+  return parts.join(join);
 }
 
 function normalizeProseBlock(value: string): string {
@@ -278,11 +235,11 @@ function substantiveBlocks(tree: Root): string[] {
   };
   visit(tree, (node, _index, parent) => {
     if (node.type === "paragraph" && parent?.type !== "listItem") {
-      record(normalizeProseBlock(proseText(node)));
+      record(normalizeProseBlock(textOf(node, { join: " " })));
     } else if (node.type === "listItem") {
-      record(normalizeProseBlock(listItemText(node as ListItem)));
+      record(normalizeProseBlock(textOf(node as ListItem, { join: " ", skipNestedLists: true })));
     } else if (node.type === "tableRow") {
-      record(normalizeProseBlock(proseText(node)));
+      record(normalizeProseBlock(textOf(node, { join: " " })));
     } else if (node.type === "code") {
       record(normalizeCodeBlock((node as Code).value));
     }
@@ -295,7 +252,7 @@ function structureFromTree(tree: Root): DocStructure {
   const headings: string[] = [];
 
   visit(tree, "heading", (node: Heading) => {
-    const text = headingText(node);
+    const text = textOf(node, { join: "" });
     if (title === null && node.depth === 1) {
       title = text;
     } else {

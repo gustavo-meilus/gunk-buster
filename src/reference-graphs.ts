@@ -2,7 +2,7 @@ import path from "node:path";
 import { parse as parseJsonWithPointers } from "json-source-map";
 import { outboundReferencesOf, type DocGraph } from "./doc-graph.js";
 import { DOC_EXTENSIONS, readIndexedFile, type FileEntry } from "./file-index.js";
-import { deduplicateAssertions, type ReferenceAssertion } from "./reference-assertions.js";
+import { deduplicateAssertions, jsonPointer, type ReferenceAssertion } from "./reference-assertions.js";
 
 /**
  * Reference graphs 4–6 of the scan (see docs/specs/mvp-1-scan.md): the
@@ -112,7 +112,7 @@ async function packageScriptMentions(
 
   for (const [name, value] of Object.entries(scripts)) {
     if (typeof value !== "string") continue;
-    const pointer = `/scripts/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+    const pointer = jsonPointer(["scripts", name]);
     retainMentionAssertions(assertionsFromMentions("package-script", packageJsonPath, `scripts.${name}`, value, candidatePaths, (pointers[pointer]?.value.line ?? 0) + 1, true), assertions, into);
   }
 }

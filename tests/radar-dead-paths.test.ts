@@ -151,6 +151,15 @@ describe("radar(repoRoot, config) — dead-path check (#11)", () => {
     expect(finding?.evidence[0]?.confidence).toBe("STRONG");
   });
 
+  it("flags a dead path-only table cell", () => {
+    const finding = deadPathFindings(result).find(
+      (f) => f.path === "README.md" && f.actual === "docs/removed-table-cell.md",
+    );
+    expect(finding).toBeDefined();
+    expect(finding?.label).toBe("MOLD");
+    expect(finding?.evidence[0]?.confidence).toBe("STRONG");
+  });
+
   it("disables entirely when radar.checks.deadPaths is false", async () => {
     const config = defaultConfig();
     const disabled = { ...config, radar: { ...config.radar, checks: { ...config.radar.checks, deadPaths: false } } };

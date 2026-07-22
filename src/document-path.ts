@@ -1,4 +1,6 @@
 import path from "node:path";
+import type { Code, InlineCode, Root, TableCell } from "mdast";
+import { visit } from "unist-util-visit";
 
 export type DocumentPathAnchor = "document" | "repository";
 
@@ -35,9 +37,13 @@ export function repositoryInventory(files: ReadonlySet<string>): RepositoryInven
   return { files, directories };
 }
 
-function hasLiveAncestor(target: string, inventory: RepositoryInventory): boolean {
+// The resolution base is trivially a live directory (the source document is
+// indexed inside it), so it must be excluded from the walk — otherwise every
+// unanchored, extension-less token would inherit its cue from the document's
+// own directory regardless of what the token names.
+function hasLiveAncestor(target: string, base: string, inventory: RepositoryInventory): boolean {
   let current = path.posix.dirname(target);
-  while (current !== "." && current !== "") {
+  while (current !== "." && current !== "" && current !== base) {
     if (inventory.directories.has(current)) return true;
     current = path.posix.dirname(current);
   }
@@ -86,7 +92,7 @@ export function resolveDocumentPath(
     rootAnchorCue ||
     explicitlyRelative ||
     FILE_EXTENSION.test(withoutTrailing) ||
-    hasLiveAncestor(resolvedTarget, inventory);
+    hasLiveAncestor(resolvedTarget, base, inventory);
   if (!hasCue) return null;
 
   return {
@@ -97,4 +103,84 @@ export function resolveDocumentPath(
     resolvedTarget,
     live: inventory.files.has(resolvedTarget) || inventory.directories.has(resolvedTarget),
   };
+}
+
+export interface ExplicitPathMention {
+  token: string;
+  line: number;
+}
+
+// Outer punctuation a token can pick up from surrounding prose-like
+// separators inside a code span/block (commas, colons, quotes, parens) is
+// trimmed before it is judged against the path grammar. Deliberately
+// excludes glob/placeholder characters (*?[]<>{}$) and "/" so callers'
+// guards still see them intact.
+const LEADING_PUNCTUATION = /^['",;:()]+/;
+const TRAILING_PUNCTUATION = /['",;:.()]+$/;
+
+function tokenize(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .map((raw) => raw.replace(LEADING_PUNCTUATION, "").replace(TRAILING_PUNCTUATION, ""))
+    .filter((token) => token.length > 0);
+}
+
+/**
+ * Walk one document's mdast tree and collect every whitespace-separated
+ * token inside an inline code span or a fenced/indented code block, plus one
+ * token per table cell (its whole normalized content, not whitespace-split —
+ * a cell is a single claim, not a command line), each tagged with its
+ * 1-indexed source line. This is the one shared extractor Scan and Radar
+ * both consume for explicit path mentions (spec: "Document path contract") —
+ * prose is never mined, only these unambiguous structures.
+ *
+ * Line numbers: mdast's `position.start.line` for a fenced code block is the
+ * opening-fence line, so content lines start one below it; an indented code
+ * block has no fence line to skip. The two are told apart by comparing the
+ * block's own line span (`end.line - start.line - 1`) against its actual
+ * content-line count — they only agree for a fenced block.
+ */
+export function extractExplicitPathMentions(tree: Root): ExplicitPathMention[] {
+  const mentions: ExplicitPathMention[] = [];
+
+  visit(tree, (node) => {
+    if (node.type === "inlineCode") {
+      const value = (node as InlineCode).value;
+      const line = node.position?.start.line ?? 1;
+      for (const token of tokenize(value)) mentions.push({ token, line });
+      return;
+    }
+
+    if (node.type === "code") {
+      const codeNode = node as Code;
+      const start = codeNode.position?.start.line ?? 1;
+      const end = codeNode.position?.end.line ?? start;
+      const lines = codeNode.value.split("\n");
+      const isFenced = end - start - 1 === lines.length;
+      const firstContentLine = isFenced ? start + 1 : start;
+
+      lines.forEach((lineText, index) => {
+        for (const token of tokenize(lineText)) {
+          mentions.push({ token, line: firstContentLine + index });
+        }
+      });
+      return;
+    }
+
+    if (node.type === "tableCell") {
+      const cell = node as TableCell;
+      const values: string[] = [];
+      visit(cell, (child) => {
+        if (child.type === "text" || child.type === "inlineCode") values.push((child as { value: string }).value);
+      });
+      const line = cell.position?.start.line ?? 1;
+      const cellTokens = tokenize(values.join(""));
+      // Spec: a table cell only counts when its normalized content is one
+      // path-shaped token — a cell with prose or multiple words is not mined.
+      const [token] = cellTokens;
+      if (token !== undefined && cellTokens.length === 1) mentions.push({ token, line });
+    }
+  });
+
+  return mentions;
 }

@@ -143,6 +143,54 @@ describe("scan(repoRoot, config) — an untracked source does not rescue an inde
   });
 });
 
+/**
+ * A doc linking to itself proves nothing reaches it from outside — the doc
+ * graph's `hasInboundFromOthers` already excludes a self-source from
+ * `inboundLinks`. The reference-assertion graph must agree: a link or
+ * mention that resolves to its own source document must not add that
+ * document to `references.referenced` either, or GHOST gets a second,
+ * inconsistent rescue path.
+ */
+describe("scan(repoRoot, config) — a doc's own self-link does not rescue it from GHOST (#5)", () => {
+  let repo: string;
+  let result: ScanResult;
+
+  beforeAll(async () => {
+    repo = await createFixtureRepo("self-referencing-orphan", { commitDate: NINETY_DAYS_AGO });
+    result = await scan(repo, defaultConfig());
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  it("stays GHOST even though it links to itself", () => {
+    const finding = fileFindings(result).find((f) => f.path === "docs/self-linked.md");
+
+    expect(finding).toBeDefined();
+    expect(finding?.label).toBe("GHOST");
+    expect(finding?.evidence[0]?.rule).toBe("unreferenced");
+  });
+});
+
+describe("scan(repoRoot, config) — a fenced code-block mention survives trailing punctuation (#2)", () => {
+  let repo: string;
+  let result: ScanResult;
+
+  beforeAll(async () => {
+    repo = await createFixtureRepo("punctuated-command-mention", { commitDate: NINETY_DAYS_AGO });
+    result = await scan(repo, defaultConfig());
+  });
+
+  afterAll(async () => {
+    await removeDir(repo);
+  });
+
+  it("is rescued from GHOST by a command-line mention immediately followed by punctuation", () => {
+    expect(pathsWithLabel(result, "GHOST")).not.toContain("docs/target.md");
+  });
+});
+
 describe("scan(repoRoot, config) — RELIC: orphaned + sensitive content (#5)", () => {
   let repo: string;
   let result: ScanResult;

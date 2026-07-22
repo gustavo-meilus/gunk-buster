@@ -39,6 +39,14 @@ function hasInboundFromOthers(
   return [...sources].some((source) => source !== entry.path);
 }
 
+/** Same self-reference exclusion as `hasInboundFromOthers`, for the reference-assertion graph. */
+function hasAssertionFromOthers(
+  assertions: readonly { sourcePath: string; target: string }[],
+  entry: FileEntry,
+): boolean {
+  return assertions.some((assertion) => assertion.target === entry.path && assertion.sourcePath !== entry.path);
+}
+
 /**
  * The composite unreferenced predicate: evidence only when every reference
  * surface comes up empty. The rationale names each one, so the finding is
@@ -54,7 +62,7 @@ export function unreferencedEvidence(entry: FileEntry, ctx: DetectorContext): Ev
     hasInboundFromOthers(docGraph.inboundImages, entry) ||
     docGraph.navReferenced.has(entry.path) ||
     docGraph.readmeReferenced.has(entry.path) ||
-    references.referenced.has(entry.path);
+    hasAssertionFromOthers(references.assertions, entry);
   if (referenced) return [];
 
   return [
